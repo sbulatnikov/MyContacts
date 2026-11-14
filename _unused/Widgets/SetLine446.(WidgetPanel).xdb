@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<WidgetPanel>
+	<Name>SetLine446</Name>
+	<Placement>
+		<X>
+			<Pos>12</Pos>
+			<Size>416</Size>
+		</X>
+		<Y>
+			<Pos>446</Pos>
+			<Size>1</Size>
+		</Y>
+	</Placement>
+	<BackLayer href="Textures/Line.Stretch.(WidgetLayerSimpleTexture).xdb" />
+	<TransparentInput>true</TransparentInput>
+</WidgetPanel>

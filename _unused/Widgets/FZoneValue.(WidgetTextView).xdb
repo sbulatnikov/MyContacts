@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<WidgetTextView>
+	<Name>FZoneValue</Name>
+	<Placement>
+		<X>
+			<Pos>120</Pos>
+			<Size>180</Size>
+		</X>
+		<Y>
+			<Pos>198</Pos>
+			<Size>24</Size>
+		</Y>
+	</Placement>
+	<FormatFileRef href="../Texts/Value.txt" />
+</WidgetTextView>

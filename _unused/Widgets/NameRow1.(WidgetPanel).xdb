@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<WidgetPanel>
+	<Name>NameRow1</Name>
+	<Placement>
+		<X>
+			<Pos>12</Pos>
+			<Size>288</Size>
+		</X>
+		<Y>
+			<Pos>312</Pos>
+			<Size>26</Size>
+		</Y>
+	</Placement>
+	<BackLayer href="Textures/NameCurrent.Frame_7_7_7_7.(WidgetLayerTiledTexture).xdb" />
+	<Children>
+		<Item href="NameNick.(WidgetTextView).xdb" />
+		<Item href="NameSince.(WidgetTextView).xdb" />
+	</Children>
+	<reactionOnPointing>mc_tip</reactionOnPointing>
+	<Visible>false</Visible>
+</WidgetPanel>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<WidgetButton>
+	<Name>ScrollTrack</Name>
+	<Placement>
+		<X>
+			<Pos>402</Pos>
+			<Size>8</Size>
+		</X>
+		<Y>
+			<Pos>4</Pos>
+			<Size>450</Size>
+		</Y>
+	</Placement>
+	<IgnoreDblClick>true</IgnoreDblClick>
+	<TextTag>button_label</TextTag>
+	<Variants>
+		<Item>
+			<PushedOffset x="0" y="0" />
+			<StateNormal>
+				<LayerMain href="Textures/ScrollTrack.Stretch.(WidgetLayerSimpleTexture).xdb" />
+			</StateNormal>
+			<StatePushed>
+				<LayerMain href="Textures/ScrollTrack.Stretch.(WidgetLayerSimpleTexture).xdb" />
+			</StatePushed>
+			<StateDisabled>
+				<LayerMain href="Textures/ScrollTrack.Stretch.(WidgetLayerSimpleTexture).xdb" />
+			</StateDisabled>
+			<Reaction>mc_track</Reaction>
+			<ReactionOnUp>true</ReactionOnUp>
+		</Item>
+	</Variants>
+	<TextStyle>
+		<Align>ALIGNY_MIDDLE</Align>
+	</TextStyle>
+	<Children>
+		<Item href="ScrollThumb.(WidgetPanel).xdb" />
+	</Children>
+	<reactionWheelUp>mc_list_up</reactionWheelUp>
+	<reactionWheelDown>mc_list_down</reactionWheelDown>
+</WidgetButton>
