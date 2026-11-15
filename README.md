@@ -59,7 +59,7 @@
 
 ```
 lua/       скрипты в UTF-8 (при сборке переводятся в Windows-1251)
-             LibDnD.lua  перетаскивание окон и кнопки (чужая библиотека, уже в Windows-1251)
+             LibDnD.lua  перетаскивание окон и кнопки (уже в Windows-1251)
              Util.lua    строки, чат, время, кэш виджетов
              Config.lua  настройки
              DB.lua      база игроков — без интерфейса
@@ -136,9 +136,4 @@ MyContacts_Cards    отметка, заметки, история ников и
 
 ## Лицензия
 
-Код аддона, генератора и тестов — [MIT](LICENSE). На чужие части из списка ниже она не распространяется.
-
-## Чужое в репозитории
-
-- `lua/LibDnD.lua` — Drag&Drop Library, авторы SLA и hal.dll
-  ([тема на alloder.pro](https://alloder.pro/topic/260-how-to-libdndlua-biblioteka-dragdrop/)).
+[MIT](LICENSE).
