@@ -1,0 +1,35 @@
+# Тесты на заглушках API игры (обычная и отладочная сборка), сборка аддона и упаковка в .pak
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Инструменты сборки
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin lua5.3
+          pip install numpy pillow
+      - name: Тесты, обычная и отладочная сборка
+        run: sh test/run.sh
+      - name: Сборка аддона
+        run: python gen/assemble.py out/MyContacts
+      - name: В обычной сборке нет pcall и отладки
+        run: |
+          ! grep -rnE '(^|[^[:alnum:]_.])pcall\b' out/MyContacts/Scripts --include='*.lua'
+          ! grep -rnwE 'debug|DEBUG|Debug|Probe' out/MyContacts/Scripts --include='*.lua'
+          test ! -e out/MyContacts/Scripts/Probe.lua
+      - name: Упаковка
+        run: python gen/pak.py out/MyContacts out/MyContacts.pak
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MyContacts-pak
+          path: out/MyContacts.pak
