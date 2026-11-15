@@ -1,10 +1,14 @@
-"""Собирает папку аддона MyContacts: ресурсы (build.py), скрипты в cp1251, AddonDesc, проверка ссылок."""
+"""Собирает папку аддона MyContacts: ресурсы (build.py), скрипты в cp1251, AddonDesc, проверка ссылок.
+
+  python3 gen/assemble.py [папка аддона]     по умолчанию out/MyContacts
+Рядом с папкой аддона не появляется ничего; PNG текстур для предпросмотра — в out/preview.
+"""
 import os, re, subprocess, sys, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 OUT = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(ROOT, 'out', 'MyContacts')
-sys.path.insert(0, os.path.join(ROOT, '..', '..', 'tools'))
+sys.path.insert(0, os.path.join(ROOT, 'tools'))  # своя копия: репозиторий собирается сам по себе
 import strip_debug  # noqa: E402  — отладка только в сборке с ALLODS_DEBUG=1
 
 VERSION = re.search(r'MC\.VERSION = "([^"]+)"', open(os.path.join(ROOT, 'lua', 'Util.lua'), encoding='utf-8').read()).group(1)

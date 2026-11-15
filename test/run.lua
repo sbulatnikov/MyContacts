@@ -271,3 +271,4 @@ MC.DB.Load()
 check( MC.DB.Count() == 0, "после очистки загрузка пустая" )
 
 print( fails == 0 and "ВСЁ ОК" or ( "ОШИБОК: " .. fails ) )
+os.exit( fails == 0 and 0 or 1 )   -- код выхода — для test/run.sh и проверок на GitHub
