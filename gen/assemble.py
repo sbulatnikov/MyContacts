@@ -1,7 +1,7 @@
 """Собирает папку аддона MyContacts: ресурсы (build.py), скрипты в cp1251, AddonDesc, проверка ссылок.
 
   python3 gen/assemble.py [папка аддона]     по умолчанию out/MyContacts
-Рядом с папкой аддона не появляется ничего; PNG текстур для предпросмотра — в out/preview.
+PNG текстур для просмотра глазами генератор кладёт в out/preview.
 """
 import os, re, subprocess, sys, shutil
 

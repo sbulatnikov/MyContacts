@@ -4,3 +4,7 @@ addon/
 __pycache__/
 *.pyc
 backup/
+
+# Предпросмотр окна и виджеты прежних версий — только у автора
+/tools/render.py
+/_unused/
