@@ -9,6 +9,17 @@
 -- Игроки рядом и цель новых записей не создают, только обновляют известные.
 -- Ключ записи: "U<id>" или "N<ник>@<номер сервера>" (вручную, пока ID неизвестен).
 -- Строки ников, серверов и зон — в кодировке клиента (как отдаёт FromWString).
+--
+-- Как расширять запись, не очищая базу. Строка записи — 15 постоянных полей через «|», за ними
+-- «хвост» из необязательных полей вида ключ=значение («…|m|c=3,7»). Версия аддона, которая ключа
+-- не знает, поле не теряет: хранит как есть (r.ext) и пишет обратно. Поэтому SCHEMA при добавлении
+-- поля НЕ меняем (смена SCHEMA стирает базу у всех). Новое поле (например, рейтинги арен 3х3 и 6х6):
+--   1) придумать короткий ключ из латинских букв и цифр («a3», «a6»);
+--   2) добавить его в TAIL: pack( r ) -> строка или nil (nil — поле не пишется, так у большинства
+--      игроков запись не растёт), unpack( r, значение );
+--   3) в значении нельзя «|» и перевод строки; числа и списки через запятую подходят.
+-- Постоянные 15 полей не трогаем и не переставляем: их по номерам читает и версия 0.9.2
+-- (она хвост не понимает и при записи куска отбрасывает — сама база при этом цела).
 --------------------------------------------------------------------------------
 MC.DB = {}
 local DB = MC.DB
@@ -82,12 +93,69 @@ local function Clean( s )
 	return ( string.gsub( tostring( s or "" ), "[|\r\n]", " " ) )
 end
 
+--------------------------------------------------------------------------------
+-- Хвост записи: необязательные поля ключ=значение (см. «Как расширять запись» в начале файла)
+--------------------------------------------------------------------------------
+local FIXED = 15        -- число постоянных полей; всё, что дальше, — хвост
+
+-- c — прежние классы игрока (номера словаря cls через запятую, недавние первыми).
+-- Текущий класс лежит в постоянном поле cls, поэтому у игрока с одним классом хвоста нет.
+local TAIL = {
+	c = {
+		pack = function( r )
+			if not r.cp or #r.cp == 0 then return nil end
+			return table.concat( r.cp, "," )
+		end,
+		unpack = function( r, v )
+			local list, seen = {}, {}
+			for id in string.gmatch( v, "%d+" ) do
+				local n = tonumber( id )
+				-- текущий класс и повторы в списке прежних не нужны
+				if n > 0 and n ~= r.cls and not seen[ n ] then
+					seen[ n ] = true
+					list[ #list + 1 ] = n
+				end
+			end
+			if #list > 0 then r.cp = list end
+		end,
+	},
+}
+local TAIL_KEYS = {}
+for key in pairs( TAIL ) do TAIL_KEYS[ #TAIL_KEYS + 1 ] = key end
+table.sort( TAIL_KEYS )
+
+local function PackTail( r, out )
+	for _, key in ipairs( TAIL_KEYS ) do
+		local v = TAIL[ key ].pack( r )
+		if v ~= nil and v ~= "" then out[ #out + 1 ] = key .. "=" .. v end
+	end
+	-- поля, которых эта версия не знает (записаны более новой), возвращаем как были
+	if r.ext then
+		for _, raw in ipairs( r.ext ) do out[ #out + 1 ] = raw end
+	end
+end
+
+local function UnpackTail( r, f )
+	for i = FIXED + 1, #f do
+		local key, v = string.match( f[ i ], "^([%w_]+)=(.*)$" )
+		if key and TAIL[ key ] then
+			TAIL[ key ].unpack( r, v )
+		elseif f[ i ] ~= "" then
+			r.ext = r.ext or {}
+			r.ext[ #r.ext + 1 ] = f[ i ]
+		end
+	end
+end
+
 -- name|sh|fac|seen|zone|how|gs|gsAt|uid|cls|first|guild|rank|guildFrom|flags
 -- (guild: "" — неизвестна, 0 — без гильдии; flags: "m" — добавлен вручную, хранится всегда)
+-- дальше — хвост ключ=значение (TAIL), только у тех записей, где он есть
 local function Pack( r )
-	return table.concat( {
+	local out = {
 		Clean( r.name ), r.sh or 0, r.fac or 0, r.seen or 0, r.zone or 0, r.how or "", r.gs or 0, r.gsAt or 0,
-		r.uid or "", r.cls or 0, r.first or 0, r.g or "", r.gr or 0, r.gFrom or 0, r.man and "m" or "" }, SEP )
+		r.uid or "", r.cls or 0, r.first or 0, r.g or "", r.gr or 0, r.gFrom or 0, r.man and "m" or "" }
+	PackTail( r, out )
+	return table.concat( out, SEP )
 end
 
 local function Split( s )
@@ -113,6 +181,7 @@ local function Unpack( key, s )
 	if f[ 15 ] == "m" then r.man = true end
 	if f[ 12 ] and f[ 12 ] ~= "" then r.g = tonumber( f[ 12 ] ) r.gr = tonumber( f[ 13 ] ) or 0 r.gFrom = tonumber( f[ 14 ] ) or 0 end
 	r.nameL = MC.Lower( r.name )
+	UnpackTail( r, f )
 	return r
 end
 
@@ -297,6 +366,45 @@ function DB.UidOf( u )
 end
 
 --------------------------------------------------------------------------------
+-- Классы игрока: текущий (r.cls) и прежние (r.cp — номера словаря, недавние первыми).
+-- Персонаж узнаётся по ID, поэтому после смены класса это та же запись с новым классом.
+--------------------------------------------------------------------------------
+local function HadClass( r, c )
+	if not r.cp then return false end
+	for _, id in ipairs( r.cp ) do
+		if id == c then return true end
+	end
+	return false
+end
+
+-- Новый текущий класс: прежний уходит в начало списка, сам новый из списка убирается (без повторов)
+local function SetClass( r, c )
+	local old = r.cls or 0
+	if old == c then return false end
+	if old ~= 0 then
+		local list = { old }
+		for _, id in ipairs( r.cp or {} ) do
+			if id ~= c and id ~= old then list[ #list + 1 ] = id end
+		end
+		r.cp = list
+	end
+	r.cls = c
+	return true
+end
+
+-- Названия классов игрока: первым текущий, за ним прежние
+function DB.Classes( r )
+	local res = {}
+	local cur = DB.DictName( "cls", r.cls )
+	if cur ~= "" then res[ 1 ] = cur end
+	for _, id in ipairs( r.cp or {} ) do
+		local name = DB.DictName( "cls", id )
+		if name ~= "" then res[ #res + 1 ] = name end
+	end
+	return res
+end
+
+--------------------------------------------------------------------------------
 -- Изменения
 --------------------------------------------------------------------------------
 local function Rekey( r, newKey )
@@ -319,6 +427,15 @@ local function Merge( dst, src )
 	end
 	if dst.fac == 0 then dst.fac = src.fac end
 	if dst.cls == 0 then dst.cls = src.cls end
+	-- классы второй записи дописываем в конец прежних (текущий класс dst остаётся текущим)
+	local extra = { src.cls or 0 }
+	for _, id in ipairs( src.cp or {} ) do extra[ #extra + 1 ] = id end
+	for _, id in ipairs( extra ) do
+		if id ~= 0 and id ~= dst.cls and not HadClass( dst, id ) then
+			dst.cp = dst.cp or {}
+			dst.cp[ #dst.cp + 1 ] = id
+		end
+	end
 	if src.man then dst.man = true end
 	if HasCard( src ) then cardsDirty = true end
 end
@@ -387,7 +504,7 @@ function DB.Touch( info, now )
 	if info.fac and info.fac > 0 and r.fac ~= info.fac then r.fac = info.fac changed = true end
 	if info.cls and info.cls ~= "" then
 		local c = DB.DictId( "cls", info.cls )
-		if r.cls ~= c then r.cls = c changed = true end
+		if SetClass( r, c ) then changed = true end
 	end
 	if info.gs and info.gs > 0 and r.gs ~= info.gs then r.gs, r.gsAt = info.gs, now changed = true end
 	-- гильдия и ранг: только когда игра отдала данные (info.guild == "" — без гильдии, nil — неизвестно)

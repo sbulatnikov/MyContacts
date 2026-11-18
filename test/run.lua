@@ -293,5 +293,58 @@ MC.UI.OpenCard( odd )
 check( not FIND( "ClsSlot1" ).visible and string.find( FIND( "CardInfo" ).val, "SOMENEWCLASS", 1, true ), "карточка: класс без эмблемы остаётся текстом" )
 MC.UI.CloseCard()
 
+-- 15. Пул классов: копится по ID, без повторов, хранится в хвосте записи, старая база читается как есть
+local hour = 22
+local function reclass( cls )
+	hour = hour + 1
+	DATE = { y = 2026, m = 11, d = 14 + math.floor( hour / 24 ), h = hour % 24, min = 0 }
+	UNITS[ 50 ].cls = cls
+	EVENTS.EVENT_UNITS_CHANGED( { spawned = { 50 } } )
+	return table.concat( MC.DB.Classes( cm ), "," )
+end
+local function stored( key )
+	for name, chunk in pairs( CONFIG ) do
+		if string.find( name, "^MyContacts_DB_" ) and chunk[ key ] then return chunk[ key ], name end
+	end
+end
+local function fields( s ) return select( 2, string.gsub( s, "|", "" ) ) + 1 end
+check( table.concat( MC.DB.Classes( cm ), "," ) == "Маг" and cm.cp == nil, "пул классов: один класс — списка прежних нет" )
+check( reclass( "DRUID" ) == "Друид,Маг", "пул классов: смена класса — прежний остаётся в пуле" )
+check( reclass( "DRUID" ) == "Друид,Маг", "пул классов: тот же класс повторно ничего не меняет" )
+check( reclass( "MAGE" ) == "Маг,Друид", "пул классов: возврат к прежнему — без повторов" )
+check( reclass( "WARRIOR" ) == "Воин,Маг,Друид", "пул классов: третий класс, недавние первыми" )
+MC.DB.Flush()
+local packed = stored( "U0x6331" )
+local ids = MC.DB.DictId( "cls", "Маг" ) .. "," .. MC.DB.DictId( "cls", "Друид" )
+check( packed and fields( packed ) == 16 and string.sub( packed, -( #ids + 3 ) ) == "|c=" .. ids, "пул классов: прежние классы — в хвосте записи (" .. tostring( packed ) .. ")" )
+check( fields( stored( odd.k ) ) == 15, "пул классов: у игрока с одним классом запись не выросла" )
+MC.DB.Load()
+cm = MC.DB.FindByUid( "0x6331" )
+check( cm and table.concat( MC.DB.Classes( cm ), "," ) == "Воин,Маг,Друид", "пул классов переживает загрузку" )
+MC.UI.OpenCard( cm )
+check( FIND( "ClsSlot1" ).tex == "tex:CLS_WARRIOR" and FIND( "ClsSlot1" ).fade == 1 and FIND( "ClsSlot2" ).tex == "tex:CLS_MAGE"
+	and FIND( "ClsSlot2" ).fade == 0.45 and FIND( "ClsSlot3" ).tex == "tex:CLS_DRUID" and FIND( "ClsSlot3" ).visible
+	and not FIND( "ClsSlot4" ).visible, "карточка: ряд эмблем — текущий класс первым, прежние приглушены" )
+check( FIND( "CardInfo" ).pl.posX == 12 + 3 * 30 + 4, "карточка: сведения сдвинуты за три эмблемы" )
+MC.UI.CloseCard()
+-- запись из более новой версии: незнакомые поля хвоста не теряются при перезаписи
+local _, chunkName = stored( "U0x6331" )
+CONFIG[ chunkName ][ "U0x6331" ] = packed .. "|a3=1850|zz=x,y"
+MC.DB.Load()
+cm = MC.DB.FindByUid( "0x6331" )
+MC.DB.SetMark( cm, 1 )
+MC.DB.Flush()
+local again = stored( "U0x6331" )
+check( string.find( again, "|c=" .. ids .. "|a3=1850|zz=x,y", 1, true ) ~= nil, "хвост записи: незнакомые поля сохранены как были (" .. again .. ")" )
+-- база от версии 0.9.2 (15 полей, без хвоста): формат тот же, ничего не очищается и не теряется
+local total = MC.DB.Count()
+CONFIG[ chunkName ][ "U0x6331" ] = string.match( again, "^(.-)|c=" )
+MC.DB.Load()
+cm = MC.DB.FindByUid( "0x6331" )
+check( CONFIG.MyContacts_Meta.v == 2 and MC.DB.Count() == total and cm and cm.mark == 1 and cm.name == "Классный" and cm.gs == 30000
+	and table.concat( MC.DB.Classes( cm ), "," ) == "Воин" and cm.cp == nil and cm.ext == nil, "старая база (0.9.2) читается без очистки и потерь" )
+check( reclass( "BARD" ) == "Бард,Воин", "старая запись: пул начинает копиться со следующей смены класса" )
+DATE = { y = 2026, m = 11, d = 13, h = 22, min = 0 }
+
 print( fails == 0 and "ВСЁ ОК" or ( "ОШИБОК: " .. fails ) )
 os.exit( fails == 0 and 0 or 1 )   -- код выхода — для test/run.sh и проверок на GitHub

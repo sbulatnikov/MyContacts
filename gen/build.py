@@ -465,9 +465,10 @@ card_hdr = header('Card', CW, 'CardTitleText', [card_close])
 ipanel('CardDot', 12, 66, 10, 'Textures/DotLeague.Stretch.(WidgetLayerSimpleTexture).xdb')
 tv('CardNick', 30, 54, CW - 42, 32, 'Nick')
 tv('CardInfo', 12, 88, CW - 24, 22, 'Body2')
-# эмблемы классов слева от строки сведений: первая — текущий класс.
+# эмблемы классов слева от строки сведений: первая — текущий класс, дальше — классы, на которых
+# игрок был замечен раньше (приглушены, недавние первыми). Шести мест хватает: смена класса — редкость.
 # Показанные эмблемы сдвигают CardInfo вправо — это делает lua/UI.lua (CLS_SLOTS, CLS_X, CLS_STEP те же).
-CLS_SLOTS, CLS_X, CLS_STEP, CLS_SIZE = 1, 12, 30, 28
+CLS_SLOTS, CLS_X, CLS_STEP, CLS_SIZE = 6, 12, 30, 28
 cls_slots = [ipanel('ClsSlot%d' % (i + 1), CLS_X + i * CLS_STEP, 85, CLS_SIZE,
                     'Textures/Cls_Warrior.Stretch.(WidgetLayerSimpleTexture).xdb', visible=False) for i in range(CLS_SLOTS)]
 CHIP_LABELS = {'neu': 'Нейтральный', 'pos': 'Положительный', 'neg': 'Отрицательный'}

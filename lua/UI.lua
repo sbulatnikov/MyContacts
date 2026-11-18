@@ -19,8 +19,9 @@ local ROWS, ROW_H, WHEEL_ROWS = 16, 28, 3
 local NAME_ROWS = 4         -- строк в «Ники»: первая — текущий, остальные — история
 local GUILD_ROWS = 5        -- строк в «Гильдии» (название слева, ранг справа): первая — текущая
 local TRACK_H = 450
--- эмблемы классов в карточке (размеры — как в gen/build.py): первая — текущий класс
-local CLS_SLOTS = 1
+-- эмблемы классов в карточке (размеры — как в gen/build.py): первая — текущий класс,
+-- остальные — классы, на которых игрок был замечен раньше
+local CLS_SLOTS = 6
 local CLS_X, CLS_STEP, CLS_GAP = 12, 30, 4
 local CARD_W = 600
 
@@ -459,7 +460,7 @@ local function RenderCard()
 	SetText( ui.cardNick, r.name )
 	local parts = {}
 	local cls = DB.DictName( "cls", r.cls )
-	RenderClasses( cls ~= "" and { cls } or {} )
+	RenderClasses( DB.Classes( r ) )
 	if cls ~= "" then parts[ #parts + 1 ] = cls end
 	local shard = DB.DictName( "shard", r.sh )
 	if shard ~= "" then parts[ #parts + 1 ] = shard end
