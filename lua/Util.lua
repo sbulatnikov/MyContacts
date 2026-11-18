@@ -84,6 +84,48 @@ function MC.CharLen( s )
 	return n
 end
 
+--------------------------------------------------------------------------------
+-- Сколько строк займёт текст в многострочном поле (перенос по словам, как у TextView).
+-- Высоту отрисованного текста игра отдаёт только после кадра (TextView:GetTextRect), а блок заметки
+-- нужно расставить сразу, поэтому строки считаем сами по ширинам символов шрифта AllodsSystem 16.
+-- Ширины приблизительные: сняты с рубленого шрифта тех же пропорций и сверены со снимком экрана
+-- (18 широких строчных букв в 188 px). Поэтому вызывающий берёт ширину поля с запасом.
+--------------------------------------------------------------------------------
+local CHAR_W = {}
+local CHAR_W_ASCII, CHAR_W_OTHER = 9, 12    -- для символов, которых нет в таблице
+
+local function Chars( s )
+	return string.gmatch( s, IsUtf8( s ) and "[\1-\127\194-\244][\128-\191]*" or "." )
+end
+
+for w, set in pairs( {
+	[ 3 ] = "'", [ 4 ] = " !,./:;I[]fijlt|\\", [ 5 ] = "()-`r{}", [ 6 ] = "\"*г", [ 7 ] = "зкт", [ 8 ] = "J^cksvxyzсухчьэ",
+	[ 9 ] = "абвдеийлнопрцяё", [ 10 ] = "FTZЗТУъ", [ 11 ] = "&ABEKPSVXYЁАБВДЕЛРХЧЬжм", [ 12 ] = "CDGHNOQRUwИЙНОПСФЦЭЯыю",
+	[ 13 ] = "MmМЪфшщ", [ 14 ] = "%Ы", [ 15 ] = "WЖШЩ", [ 16 ] = "@Ю" } ) do
+	for ch in Chars( set ) do CHAR_W[ ch ] = w end
+end
+
+function MC.LineCount( text, width )
+	local lines, x, word = 1, 0, 0     -- x — занято в строке, word — ширина слова, которое сейчас идёт
+	for ch in Chars( text or "" ) do
+		local w = CHAR_W[ ch ] or ( #ch == 1 and string.byte( ch ) < 128 and CHAR_W_ASCII ) or CHAR_W_OTHER
+		if ch == " " then
+			x, word = x + w, 0
+		else
+			if x + w > width then
+				lines = lines + 1
+				if word > 0 and word < x and word + w <= width then
+					x = word        -- слово целиком уходит на новую строку
+				else
+					x, word = 0, 0  -- слово длиннее строки (или строка с него началась): рвём по символу
+				end
+			end
+			x, word = x + w, word + w
+		end
+	end
+	return lines
+end
+
 function MC.F( fmt, ... )
 	return string.format( fmt, ... )
 end

@@ -346,5 +346,61 @@ check( CONFIG.MyContacts_Meta.v == 2 and MC.DB.Count() == total and cm and cm.ma
 check( reclass( "BARD" ) == "Бард,Воин", "старая запись: пул начинает копиться со следующей смены класса" )
 DATE = { y = 2026, m = 11, d = 13, h = 22, min = 0 }
 
+-- 16. Заметки: блок по высоте текста, заметка в 300 знаков целиком, многострочный ввод
+check( MC.LineCount( "Сливает лут", 224 ) == 1 and MC.LineCount( "", 224 ) == 1, "расчёт строк: короткий текст — одна строка" )
+check( MC.LineCount( "фывафлыовадфлываодф", 188 ) == 2 and MC.LineCount( "фывафлыовадфлываод", 188 ) == 1,
+	"расчёт строк: как на снимке экрана — 18 широких букв в 188 px, 19-я переносится" )
+check( MC.LineCount( "раз два три", 60 ) == 2 and MC.LineCount( string.rep( "Щ", 300 ), 480 ) == 10,
+	"расчёт строк: перенос по словам; 300 самых широких букв — 10 строк поля ввода" )
+local nt = MC.DB.AddManual( "Заметочник", SH )
+MC.UI.OpenCard( nt )
+local function typeNote( text )
+	click( "mc_note_add", "NoteAdd" )
+	FIND( "EdEdit" ).text = text
+	REACTIONS.mc_ed_changed( {} )
+	local counter = FIND( "EdCount" ).val
+	click( "mc_ed_save", "EdSave" )
+	return counter
+end
+local function card( i ) return FIND( "NoteCard" .. i ) end
+local long = string.rep( "Кидает группу посреди подземелья и забирает вещи. ", 6 )
+long = string.sub( long, 1, #long - 1 ) .. "!"       -- ровно 300 знаков
+check( MC.CharLen( long ) == 300, "заметка: проверочный текст — 300 знаков" )
+check( typeNote( long ) == "300 / 300" and not FIND( "EditorLayer" ).visible, "ввод: счётчик 300 / 300, заметка сохранена" )
+check( nt.notes and #nt.notes == 1 and nt.notes[ 1 ].t == long, "заметка в 300 знаков сохранена целиком" )
+local lines = MC.LineCount( long, 224 )
+local c1 = card( 1 )
+check( lines >= 10 and lines <= 14 and c1.visible and c1.pl.posY == 200 and c1.pl.sizeY == lines * 19 + 40,
+	"заметка в 300 знаков: блок вырос под текст (" .. lines .. " строк, " .. c1.pl.sizeY .. " px)" )
+check( c1:GetChildChecked( "NoteText" ).val == long and c1:GetChildChecked( "NoteText" ).pl.sizeY == lines * 19 + 4,
+	"заметка в 300 знаков: текст показан целиком, высота текста по числу строк" )
+check( MC.LineCount( string.rep( "Щ", 300 ), 224 ) * 19 + 40 > 432, "проверка запаса: 300 широких букв упираются в высоту области" )
+typeNote( string.rep( "Щ", 300 ) )
+check( card( 1 ).pl.sizeY == 432 and card( 1 ):GetChildChecked( "NoteText" ).pl.sizeY == 396 and not card( 2 ).visible,
+	"самая широкая заметка: блок на всю область (текст 396 px при нужных 342), следующая — прокруткой" )
+MC.DB.DelNote( nt, 1 )
+check( typeNote( "строка один\r\nстрока два" ) == "22 / 300" and nt.notes[ 1 ].t == "строка один строка два", "ввод: перевод строки из буфера — пробел" )
+check( card( 1 ).pl.sizeY == 59 and card( 2 ).visible and card( 2 ).pl.posY == 200 + 59 + 8 and card( 2 ).pl.sizeY == lines * 19 + 40,
+	"короткая заметка — блок в одну строку, длинная под ней" )
+for i = 1, 7 do typeNote( "заметка " .. i ) end
+-- 9 заметок: 8 коротких (59 + 8 px) и длинная в конце; в область входит 6 коротких
+check( card( 6 ).visible and FIND( "NotesMore" ).visible and FIND( "NotesMore" ).val == "ещё 3 — прокрутите колесом", "заметки: в область входит шесть коротких, остальные — прокруткой" )
+for _ = 1, 20 do REACTIONS.mc_notes_down( {} ) end
+local last
+for i = 1, 6 do if card( i ).visible then last = card( i ) end end
+check( last:GetChildChecked( "NoteText" ).val == long and last.pl.posY + last.pl.sizeY <= 200 + 432 and not FIND( "NotesMore" ).visible,
+	"заметки: прокрутка доходит до последней, длинная заметка видна целиком" )
+for _ = 1, 20 do REACTIONS.mc_notes_up( {} ) end
+check( card( 1 ):GetChildChecked( "NoteText" ).val == "заметка 7" and card( 1 ).pl.posY == 200, "заметки: прокрутка вверх возвращает к началу" )
+-- правка: изменённая заметка меняет высоту блока
+click( "mc_note_edit", "NoteCard1" )
+check( FIND( "EdEdit" ).text == "заметка 7", "правка: в поле ввода — текст заметки" )
+FIND( "EdEdit" ).text = long
+REACTIONS.mc_ed_changed( {} )
+click( "mc_ed_save", "EdSave" )
+check( nt.notes[ 1 ].t == long and nt.notes[ 1 ].e and card( 1 ).pl.sizeY == lines * 19 + 40 and string.find( card( 1 ):GetChildChecked( "NoteDate" ).val, "изм.", 1, true ),
+	"правка: блок вырос под новый текст, дата с пометкой об изменении" )
+MC.UI.CloseCard()
+
 print( fails == 0 and "ВСЁ ОК" or ( "ОШИБОК: " .. fails ) )
 os.exit( fails == 0 and 0 or 1 )   -- код выхода — для test/run.sh и проверок на GitHub

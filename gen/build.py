@@ -270,13 +270,13 @@ def ipanel(name, x, y, s, tex, **kw):
     return X.panel(name, PL(x, y, s, s), back=tex, **kw)
 
 
-def icon_button(name, x, y, s, icon_tex_href, reaction, isz=16, on_variant=False, **kw):
+def icon_button(name, x, y, s, icon_tex_href, reaction, isz=16, on_variant=False, ay=None, hy=None, **kw):
     ipanel(name + 'Icon', (s - isz) // 2, (s - isz) // 2, isz, icon_tex_href)
     vs = [{'normal': BTN['icon'], 'hover': BTN['iconH'], 'pressed': BTN['iconP'], 'reaction': reaction, 'push': 0}]
     if on_variant:
         vs.append({'normal': BTN['iconOn'], 'hover': BTN['iconOnH'], 'pressed': BTN['iconOnH'], 'reaction': reaction, 'push': 0})
     kw.setdefault('force_pointing', 'mc_tip')
-    return X.button(name, PL(x, y, s, s), vs, children=[name + 'Icon.(WidgetPanel).xdb'], **kw)
+    return X.button(name, PL(x, y, s, s, ay=ay, hy=hy), vs, children=[name + 'Icon.(WidgetPanel).xdb'], **kw)
 
 
 def text_button(name, x, y, w, h, label, kind, reaction, **kw):
@@ -523,32 +523,51 @@ guild_rows = history('Guilds', 410, 436, ('mc_guilds_up', 'mc_guilds_down'), GUI
 RX, RW = 324, 264
 tv('NotesTitle', RX, 172, 200, 22, 'Sect', transparent=False, pointing='mc_tip')
 note_add = icon_button('NoteAdd', RX + RW - 26, 170, 26, PLUS_IC, 'mc_note_add')
-tv('NoteText', 10, 6, RW - 20 - 56, 50, 'NoteText', multiline=True)
-tv('NoteDate', 10, 58, RW - 20, 18, 'Small3')
-note_edit = icon_button('NoteEdit', RW - 58, 6, 24, EDIT_IC, 'mc_note_edit', isz=14)
-note_del = icon_button('NoteDel', RW - 30, 6, 24, TRASH_IC, 'mc_note_del', isz=14)
+# Блок заметки подстраивается под текст: высоту блока и текста выставляет lua/UI.lua (те же числа — там).
+#   текст — на всю ширину блока: RW - 20 = 244 px, шрифт AllodsSystem 16, шаг строк 18 px (в расчёте 19);
+#   обычный русский текст ≈ 7,9 px на знак -> около 30 знаков в строке, 300 знаков ≈ 10–11 строк;
+#   самые широкие буквы (Ж, Ш, Щ — 15 px) -> 16 знаков в строке, 300 знаков = 19 строк = 342 px;
+#   область заметок NOTES_H = 432 px вмещает блок с текстом в 396 px, то есть любую заметку целиком.
+# Дата и кнопки прижаты к низу блока (WIDGET_ALIGN_HIGH) и сами едут за его высотой.
+# Блоков в пуле 6: столько коротких заметок (59 px + 8 px промежуток) помещается в область.
+NOTE_CARDS, NOTES_Y, NOTES_H = 6, 200, 432
+HIGH = 'WIDGET_ALIGN_HIGH'
+tv('NoteText', 10, 6, RW - 20, 23, 'NoteText', multiline=True)
+X.textview('NoteDate', PL(10, None, 198, 18, ay=HIGH, hy=6), '../Texts/Small3.txt')
+note_edit = icon_button('NoteEdit', RW - 52, None, 22, EDIT_IC, 'mc_note_edit', isz=14, ay=HIGH, hy=4)
+note_del = icon_button('NoteDel', RW - 28, None, 22, TRASH_IC, 'mc_note_del', isz=14, ay=HIGH, hy=4)
 note_cards = []
-for i in range(4):
-    note_cards.append(X.panel('NoteCard%d' % (i + 1), PL(RX, 200 + i * 88, RW, 80), back=NOTE_FRAME,
+for i in range(NOTE_CARDS):
+    note_cards.append(X.panel('NoteCard%d' % (i + 1), PL(RX, NOTES_Y + i * 67, RW, 59), back=NOTE_FRAME,
                               children=['NoteText.(WidgetTextView).xdb', 'NoteDate.(WidgetTextView).xdb', note_edit, note_del],
                               wheel=('mc_notes_up', 'mc_notes_down'), visible=False))
 tv('NotesEmpty', RX, 300, RW, 24, 'HintCenter')
 notes_empty_add = text_button('NotesEmptyAdd', RX + (RW - 170) // 2, 332, 170, 32, 'Добавить заметку', 'sec', 'mc_note_add')
-tv('NotesMore', RX, 556, RW, 18, 'Small3C')
-X.panel('NotesArea', PL(RX, 200, RW, 404), transparent=False, wheel=('mc_notes_up', 'mc_notes_down'))
+tv('NotesMore', RX, NOTES_Y + NOTES_H + 2, RW, 18, 'Small3C')
+X.panel('NotesArea', PL(RX, NOTES_Y, RW, NOTES_H), transparent=False, wheel=('mc_notes_up', 'mc_notes_down'))
 card_delete = text_button('CardDelete', 12, 616, 170, 32, 'Удалить из базы', 'dsoft', 'mc_card_delete', force_pointing='mc_tip')
 
 # редактор заметки — модальное окно поверх карточки
-EW, EH = 400, 152
+# Поле ввода — многострочное: WidgetEditLine с multiline + wrapText (текст переносится по словам,
+# Enter сохраняет заметку, перевода строки в тексте нет). Расчёт на 300 знаков (MC.NOTE_MAX):
+#   ширина поля EW - 24 - 16 = 480 px, шрифт AllodsSystem 16, шаг строк 18 px (в расчёте 19);
+#   обычный русский текст ≈ 7,9 px на знак -> 60 знаков в строке -> 300 знаков = 5–6 строк;
+#   широкие строчные (ф, ы, ш ≈ 10,2 px) -> 47 знаков в строке -> 7 строк;
+#   самые широкие буквы (Ж, Ш, Щ — 15 px, Ю — 16 px) -> 30–32 знака в строке -> 10 строк.
+# Поэтому строк 10: вся заметка видна при любом тексте.
+ED_LINES, ED_LINE_H = 10, 19
+ED_H = ED_LINES * ED_LINE_H + 12
+EW, EH = 520, 56 + ED_H + 12 + 32 + 16
 X.panel('EdScrim', PL(0, 0, None, None, 'WIDGET_ALIGN_BOTH', 'WIDGET_ALIGN_BOTH'), back=SCRIM)
 ed_close = icon_button('EdClose', EW - 12 - 28, 8, 28, CLOSE_IC, 'mc_ed_cancel')
 ed_hdr = header('Ed', EW, 'Sect', [ed_close])
-X.editline('EdEdit', PL(8, 0, EW - 24 - 16, 36), '../Texts/Body.txt', CURSOR, SELECTION, 300, 'mc_ed_save', 'mc_ed_cancel',
-           changed='mc_ed_changed')
-X.panel('EdBox', PL(12, 56, EW - 24, 36), back=FIELD, children=['EdEdit.(WidgetEditLine).xdb'])
-tv('EdCount', 12, 104, 150, 32, 'Small3')
-ed_cancel = text_button('EdCancel', EW - 12 - 100 - 8 - 100, 104, 100, 32, 'Отмена', 'sec', 'mc_ed_cancel')
-ed_save = text_button('EdSave', EW - 12 - 100, 104, 100, 32, 'Сохранить', 'pri', 'mc_ed_save')
+X.editline('EdEdit', PL(8, 6, EW - 24 - 16, ED_H - 12), '../Texts/NoteText.txt', CURSOR, SELECTION, 300, 'mc_ed_save', 'mc_ed_cancel',
+           changed='mc_ed_changed', multiline=True)
+X.panel('EdBox', PL(12, 56, EW - 24, ED_H), back=FIELD, children=['EdEdit.(WidgetEditLine).xdb'])
+ED_BTN_Y = 56 + ED_H + 12
+tv('EdCount', 12, ED_BTN_Y, 150, 32, 'Small3')
+ed_cancel = text_button('EdCancel', EW - 12 - 100 - 8 - 100, ED_BTN_Y, 100, 32, 'Отмена', 'sec', 'mc_ed_cancel')
+ed_save = text_button('EdSave', EW - 12 - 100, ED_BTN_Y, 100, 32, 'Сохранить', 'pri', 'mc_ed_save')
 X.panel('Editor', PL(0, 0, EW, EH, 'WIDGET_ALIGN_CENTER', 'WIDGET_ALIGN_CENTER'), back=WIN_FRAME,
         children=ed_hdr + ['EdBox.(WidgetPanel).xdb', 'EdCount.(WidgetTextView).xdb', ed_cancel, ed_save])
 X.panel('EditorLayer', PL(0, 0, None, None, 'WIDGET_ALIGN_BOTH', 'WIDGET_ALIGN_BOTH'),
