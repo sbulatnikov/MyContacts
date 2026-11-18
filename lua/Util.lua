@@ -9,6 +9,16 @@ MC.tick = 0               -- секунды с запуска (EVENT_SECOND_TIME
 MC.NICK_MIN = 3
 MC.NICK_MAX = 14
 
+-- Классы: системное имя (unit.GetClass().className) -> название. В базе хранится название,
+-- по нему же карточка подбирает значок класса (MC.CLASS_SYS — обратная таблица).
+-- Демонолога в списке имён документации нет, он добавлен по игре; неизвестное имя хранится как есть.
+MC.CLASS_RU = {
+	WARRIOR = "Воин", PALADIN = "Паладин", MAGE = "Маг", DRUID = "Друид", PRIEST = "Жрец", PSIONIC = "Псионик",
+	NECROMANCER = "Некромант", STALKER = "Разведчик", BARD = "Бард", ENGINEER = "Инженер", WARLOCK = "Демонолог",
+}
+MC.CLASS_SYS = {}
+for sys, ru in pairs( MC.CLASS_RU ) do MC.CLASS_SYS[ ru ] = sys end
+
 --------------------------------------------------------------------------------
 -- Строки
 --------------------------------------------------------------------------------
@@ -72,6 +82,48 @@ function MC.CharLen( s )
 	local n = 0
 	for _ in string.gmatch( s, "[^\128-\191]" ) do n = n + 1 end
 	return n
+end
+
+--------------------------------------------------------------------------------
+-- Сколько строк займёт текст в многострочном поле (перенос по словам, как у TextView).
+-- Высоту отрисованного текста игра отдаёт только после кадра (TextView:GetTextRect), а блок заметки
+-- нужно расставить сразу, поэтому строки считаем сами по ширинам символов шрифта AllodsSystem 16.
+-- Ширины приблизительные: сняты с рубленого шрифта тех же пропорций и сверены со снимком экрана
+-- (18 широких строчных букв в 188 px). Поэтому вызывающий берёт ширину поля с запасом.
+--------------------------------------------------------------------------------
+local CHAR_W = {}
+local CHAR_W_ASCII, CHAR_W_OTHER = 9, 12    -- для символов, которых нет в таблице
+
+local function Chars( s )
+	return string.gmatch( s, IsUtf8( s ) and "[\1-\127\194-\244][\128-\191]*" or "." )
+end
+
+for w, set in pairs( {
+	[ 3 ] = "'", [ 4 ] = " !,./:;I[]fijlt|\\", [ 5 ] = "()-`r{}", [ 6 ] = "\"*г", [ 7 ] = "зкт", [ 8 ] = "J^cksvxyzсухчьэ",
+	[ 9 ] = "абвдеийлнопрцяё", [ 10 ] = "FTZЗТУъ", [ 11 ] = "&ABEKPSVXYЁАБВДЕЛРХЧЬжм", [ 12 ] = "CDGHNOQRUwИЙНОПСФЦЭЯыю",
+	[ 13 ] = "MmМЪфшщ", [ 14 ] = "%Ы", [ 15 ] = "WЖШЩ", [ 16 ] = "@Ю" } ) do
+	for ch in Chars( set ) do CHAR_W[ ch ] = w end
+end
+
+function MC.LineCount( text, width )
+	local lines, x, word = 1, 0, 0     -- x — занято в строке, word — ширина слова, которое сейчас идёт
+	for ch in Chars( text or "" ) do
+		local w = CHAR_W[ ch ] or ( #ch == 1 and string.byte( ch ) < 128 and CHAR_W_ASCII ) or CHAR_W_OTHER
+		if ch == " " then
+			x, word = x + w, 0
+		else
+			if x + w > width then
+				lines = lines + 1
+				if word > 0 and word < x and word + w <= width then
+					x = word        -- слово целиком уходит на новую строку
+				else
+					x, word = 0, 0  -- слово длиннее строки (или строка с него началась): рвём по символу
+				end
+			end
+			x, word = x + w, word + w
+		end
+	end
+	return lines
 end
 
 function MC.F( fmt, ... )
@@ -195,6 +247,26 @@ function MC.SetTex( w, key )
 	if m.tex == key then return end
 	local t = MC.Tex( key )
 	if t then m.tex = key w:SetBackgroundTexture( t ) end
+end
+
+-- Положение и размер: fields = { posX =, posY =, sizeX =, sizeY = } (любые из них).
+-- Виджет трогаем, только если хотя бы одно значение отличается от выставленного в прошлый раз.
+function MC.Place( w, fields )
+	if not w then return end
+	local m = M( w )
+	local place = m.place
+	if not place then place = {} m.place = place end
+	local same = true
+	for k, v in pairs( fields ) do
+		if place[ k ] ~= v then same = false end
+	end
+	if same then return end
+	local pl = w:GetPlacementPlain()
+	for k, v in pairs( fields ) do
+		place[ k ] = v
+		pl[ k ] = v
+	end
+	w:SetPlacementPlain( pl )
 end
 
 --------------------------------------------------------------------------------

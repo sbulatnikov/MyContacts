@@ -210,7 +210,9 @@ def button(name, pl, variants, children=(), fname=None, **kw):
 
 
 def editline(name, pl, fmt_ref, cursor, selection, maxlen, enter, esc_, focus=None, changed=None, filter_alias=None,
-             align='left', fname=None):
+             align='left', fname=None, multiline=False):
+    """multiline: текст переносится по словам на следующие строки поля (Enter по-прежнему ReactionEnter).
+    Так описаны многострочные WidgetEditLine в аддонах игры; формат текста нужен с aligny="top"."""
     body = pl
     body += '\t<Cursor1Layer href="%s" />\n\t<Cursor2Layer href="%s" />\n' % (cursor, cursor)
     body += '\t<CursorWidth>1</CursorWidth>\n\t<CursorChangeTimeMs>500</CursorChangeTimeMs>\n'
@@ -219,8 +221,13 @@ def editline(name, pl, fmt_ref, cursor, selection, maxlen, enter, esc_, focus=No
         body += '\t<reactionFocusChanged>%s</reactionFocusChanged>\n' % focus
     if changed:
         body += '\t<ReactionChanged>%s</ReactionChanged>\n' % changed
-    body += ('\t<TextStyle>\n\t\t<multiline>false</multiline>\n\t\t<wrapText>false</wrapText>\n\t\t<ellipsis>false</ellipsis>\n'
-             '\t\t<Align>ALIGNY_MIDDLE</Align>\n\t</TextStyle>\n')
+    if multiline:
+        body += ('\t<TextStyle>\n\t\t<multiline>true</multiline>\n\t\t<wrapText>true</wrapText>\n'
+                 '\t\t<showClippedSymbol>false</showClippedSymbol>\n\t\t<showClippedLine>true</showClippedLine>\n'
+                 '\t\t<ellipsis>false</ellipsis>\n\t\t<Align>ALIGNY_TOP</Align>\n\t</TextStyle>\n')
+    else:
+        body += ('\t<TextStyle>\n\t\t<multiline>false</multiline>\n\t\t<wrapText>false</wrapText>\n\t\t<ellipsis>false</ellipsis>\n'
+                 '\t\t<Align>ALIGNY_MIDDLE</Align>\n\t</TextStyle>\n')
     body += '\t<isPassword>false</isPassword>\n\t<maxSymbolsCount>%d</maxSymbolsCount>\n' % maxlen
     if filter_alias:
         body += '\t<filterAlias>%s</filterAlias>\n' % filter_alias
