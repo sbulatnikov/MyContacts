@@ -19,6 +19,10 @@ local ROWS, ROW_H, WHEEL_ROWS = 16, 28, 3
 local NAME_ROWS = 4         -- строк в «Ники»: первая — текущий, остальные — история
 local GUILD_ROWS = 5        -- строк в «Гильдии» (название слева, ранг справа): первая — текущая
 local TRACK_H = 450
+-- эмблемы классов в карточке (размеры — как в gen/build.py): первая — текущий класс
+local CLS_SLOTS = 1
+local CLS_X, CLS_STEP, CLS_GAP = 12, 30, 4
+local CARD_W = 600
 
 local filt = { neu = false, neg = false, pos = false, notes = false, recent = false }
 local search, searchL = "", ""
@@ -122,6 +126,8 @@ function UI.Init()
 	ui.cardDot = W( "CardDot" )
 	ui.cardNick = W( "CardNick" )
 	ui.cardInfo = W( "CardInfo" )
+	ui.clsSlots = {}
+	for i = 1, CLS_SLOTS do ui.clsSlots[ i ] = W( "ClsSlot" .. i ) end
 	ui.cardChips = { [ 0 ] = W( "CardMarkNeu" ), [ 1 ] = W( "CardMarkPos" ), [ -1 ] = W( "CardMarkNeg" ) }
 	ui.cardChipIcons = { [ 0 ] = W( "CardMarkNeuIcon" ), [ 1 ] = W( "CardMarkPosIcon" ), [ -1 ] = W( "CardMarkNegIcon" ) }
 	SetText( W( "CardMarkNeuText" ), "Нейтральный" )
@@ -426,6 +432,25 @@ function UI.GuildText( name, rank, unknown )
 	return name
 end
 
+-- Эмблемы классов слева от строки сведений: первая — текущий класс, прежние — приглушены.
+-- Строка сведений сдвигается на ширину показанных эмблем.
+-- names — названия классов (текущий первым). Класс, эмблемы которого в аддоне нет (новый в игре
+-- или имя не распознано), пропускаем: он остаётся текстом в строке сведений.
+local function RenderClasses( names )
+	local n = 0
+	for i, name in ipairs( names ) do
+		local sys = MC.CLASS_SYS[ name ]
+		if sys and n < CLS_SLOTS then
+			n = n + 1
+			SetTex( ui.clsSlots[ n ], "CLS_" .. sys )
+			Fade( ui.clsSlots[ n ], i == 1 and 1 or 0.45 )
+		end
+	end
+	for i = 1, CLS_SLOTS do Show( ui.clsSlots[ i ], i <= n ) end
+	local x = CLS_X + ( n > 0 and ( n * CLS_STEP + CLS_GAP ) or 0 )
+	MC.Place( ui.cardInfo, { posX = x, sizeX = CARD_W - 12 - x } )
+end
+
 local function RenderCard()
 	local r = cardRec
 	if not r or not ui.card:IsVisible() then return end
@@ -434,6 +459,7 @@ local function RenderCard()
 	SetText( ui.cardNick, r.name )
 	local parts = {}
 	local cls = DB.DictName( "cls", r.cls )
+	RenderClasses( cls ~= "" and { cls } or {} )
 	if cls ~= "" then parts[ #parts + 1 ] = cls end
 	local shard = DB.DictName( "shard", r.sh )
 	if shard ~= "" then parts[ #parts + 1 ] = shard end

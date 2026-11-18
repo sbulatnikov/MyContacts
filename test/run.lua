@@ -270,5 +270,28 @@ check( FIND( "SetWipe" ).enabled == false, "«Очистить базу» вык
 MC.DB.Load()
 check( MC.DB.Count() == 0, "после очистки загрузка пустая" )
 
+-- 14. Карточка: эмблема текущего класса слева от строки сведений
+local SH = "Нить судьбы"
+local function meet( id, name, uid, cls )
+	UNITS[ id ] = { name = name, shard = SH, fac = "Лига", cls = cls, gs = 30000 }
+	STATE.group = { { name = name, uid = UID( uid ) } }
+	EVENTS.EVENT_GROUP_MEMBER_ADDED( {} ) second()
+	STATE.group = {}
+	EVENTS.EVENT_GROUP_MEMBER_REMOVED( {} ) second()
+	EVENTS.EVENT_UNITS_CHANGED( { spawned = { id } } )
+	return MC.DB.FindByName( name, MC.DB.DictId( "shard", SH ) )
+end
+local cm = meet( 50, "Классный", "c1", "MAGE" )
+MC.UI.OpenCard( cm )
+check( cm and FIND( "ClsSlot1" ).visible and FIND( "ClsSlot1" ).tex == "tex:CLS_MAGE", "карточка: эмблема текущего класса (" .. tostring( FIND( "ClsSlot1" ).tex ) .. ")" )
+check( FIND( "CardInfo" ).pl.posX == 46 and string.find( FIND( "CardInfo" ).val, "Маг", 1, true ), "карточка: сведения сдвинуты за эмблему, класс назван текстом" )
+local noCls = MC.DB.AddManual( "Бесклассовый", SH )
+MC.UI.OpenCard( noCls )
+check( not FIND( "ClsSlot1" ).visible and FIND( "CardInfo" ).pl.posX == 12, "карточка: класс неизвестен — эмблемы нет, сведения на месте" )
+local odd = meet( 51, "Новичок", "c2", "SOMENEWCLASS" )
+MC.UI.OpenCard( odd )
+check( not FIND( "ClsSlot1" ).visible and string.find( FIND( "CardInfo" ).val, "SOMENEWCLASS", 1, true ), "карточка: класс без эмблемы остаётся текстом" )
+MC.UI.CloseCard()
+
 print( fails == 0 and "ВСЁ ОК" or ( "ОШИБОК: " .. fails ) )
 os.exit( fails == 0 and 0 or 1 )   -- код выхода — для test/run.sh и проверок на GitHub

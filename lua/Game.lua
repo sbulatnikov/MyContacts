@@ -56,10 +56,7 @@ local function FactionOf( id )
 	return f
 end
 
-local CLASS_RU = {
-	WARRIOR = "Воин", PALADIN = "Паладин", MAGE = "Маг", DRUID = "Друид", PRIEST = "Жрец", PSIONIC = "Псионик",
-	NECROMANCER = "Некромант", STALKER = "Разведчик", BARD = "Бард", ENGINEER = "Инженер", WARLOCK = "Демонолог",
-}
+local CLASS_RU = MC.CLASS_RU     -- общая с карточкой таблица классов (Util.lua)
 
 local function ClassOf( id )
 	local c = unit.GetClass( id )

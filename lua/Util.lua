@@ -9,6 +9,16 @@ MC.tick = 0               -- секунды с запуска (EVENT_SECOND_TIME
 MC.NICK_MIN = 3
 MC.NICK_MAX = 14
 
+-- Классы: системное имя (unit.GetClass().className) -> название. В базе хранится название,
+-- по нему же карточка подбирает значок класса (MC.CLASS_SYS — обратная таблица).
+-- Демонолога в списке имён документации нет, он добавлен по игре; неизвестное имя хранится как есть.
+MC.CLASS_RU = {
+	WARRIOR = "Воин", PALADIN = "Паладин", MAGE = "Маг", DRUID = "Друид", PRIEST = "Жрец", PSIONIC = "Псионик",
+	NECROMANCER = "Некромант", STALKER = "Разведчик", BARD = "Бард", ENGINEER = "Инженер", WARLOCK = "Демонолог",
+}
+MC.CLASS_SYS = {}
+for sys, ru in pairs( MC.CLASS_RU ) do MC.CLASS_SYS[ ru ] = sys end
+
 --------------------------------------------------------------------------------
 -- Строки
 --------------------------------------------------------------------------------
@@ -195,6 +205,26 @@ function MC.SetTex( w, key )
 	if m.tex == key then return end
 	local t = MC.Tex( key )
 	if t then m.tex = key w:SetBackgroundTexture( t ) end
+end
+
+-- Положение и размер: fields = { posX =, posY =, sizeX =, sizeY = } (любые из них).
+-- Виджет трогаем, только если хотя бы одно значение отличается от выставленного в прошлый раз.
+function MC.Place( w, fields )
+	if not w then return end
+	local m = M( w )
+	local place = m.place
+	if not place then place = {} m.place = place end
+	local same = true
+	for k, v in pairs( fields ) do
+		if place[ k ] ~= v then same = false end
+	end
+	if same then return end
+	local pl = w:GetPlacementPlain()
+	for k, v in pairs( fields ) do
+		place[ k ] = v
+		pl[ k ] = v
+	end
+	w:SetPlacementPlain( pl )
 end
 
 --------------------------------------------------------------------------------

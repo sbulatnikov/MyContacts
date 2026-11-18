@@ -4,12 +4,15 @@
 Генератор устроен как у BestAutoAccept (xdb.py, tex.py — общие).
 """
 import os, sys, shutil
+import numpy as np
+from PIL import Image
 sys.path.insert(0, os.path.dirname(__file__))
 import tex as T
 import xdb as X
 from xdb import placement as PL, fmt
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ASSETS = os.path.join(_ROOT, 'assets')
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(_ROOT, 'out', 'MyContacts')
 PREV = sys.argv[2] if len(sys.argv) > 2 else os.path.join(_ROOT, 'out', 'preview')
 for d in ('Widgets', 'Texts'):
@@ -192,6 +195,34 @@ MINUS_IC = icon_tex('Minus', 'minus', TXT2)
 EDIT_IC = icon_tex('Edit', 'edit', TXT2)
 TRASH_IC = icon_tex('Trash', 'trash', TXT2)
 RADAR_IC = icon_tex('Radar', 'radar', TXT_PH, size=64)
+
+# ------------------------------------------------------------------ значки классов — игровые эмблемы
+# Игра текстуру класса аддонам не отдаёт (unit.GetClass и CharacterClassId:GetInfo возвращают только имена
+# и тип маны), поэтому эмблемы классов из клиента лежат в assets/class-<имя>.png (64×64, из
+# Interface/Common/Elements/ClassIcons) и попадают в .pak как текстуры самого аддона.
+# Ключ в группе Icons — CLS_<системное имя класса>, имена — как в MC.CLASS_RU (lua/Util.lua).
+# Новый класс: положить assets/class-<имя строчными>.png и добавить имя сюда и в MC.CLASS_RU.
+CLASSES = ('WARRIOR', 'PALADIN', 'MAGE', 'DRUID', 'PRIEST', 'PSIONIC', 'NECROMANCER', 'STALKER', 'BARD', 'ENGINEER', 'WARLOCK')
+
+
+def png(name, w, h):
+    """Картинка из assets/, вписанная в холст w×h (кратно 4) с сохранением пропорций."""
+    im = Image.open(os.path.join(ASSETS, name)).convert('RGBA')
+    k = min(w / im.width, h / im.height)
+    nw, nh = max(1, int(round(im.width * k))), max(1, int(round(im.height * k)))
+    im = im.resize((nw, nh), Image.LANCZOS)
+    canvas = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    canvas.paste(im, ((w - nw) // 2, (h - nh) // 2))
+    a = np.asarray(canvas).astype(np.float64) / 255.0
+    # цвет прозрачных пикселей — средний цвет картинки, чтобы края в DXT не темнели
+    vis = a[..., 3] > 0.05
+    mean = a[vis][:, :3].mean(0) if vis.any() else np.zeros(3)
+    a[..., :3] = np.where(a[..., 3:4] > 0.003, a[..., :3], mean)
+    return a
+
+
+for k in CLASSES:
+    X.icon('CLS_' + k, 'Cls_' + k.capitalize(), png('class-%s.png' % k.lower(), 64, 64))
 X.write_icon_group()
 
 # ------------------------------------------------------------------ форматы текста
@@ -434,6 +465,11 @@ card_hdr = header('Card', CW, 'CardTitleText', [card_close])
 ipanel('CardDot', 12, 66, 10, 'Textures/DotLeague.Stretch.(WidgetLayerSimpleTexture).xdb')
 tv('CardNick', 30, 54, CW - 42, 32, 'Nick')
 tv('CardInfo', 12, 88, CW - 24, 22, 'Body2')
+# эмблемы классов слева от строки сведений: первая — текущий класс.
+# Показанные эмблемы сдвигают CardInfo вправо — это делает lua/UI.lua (CLS_SLOTS, CLS_X, CLS_STEP те же).
+CLS_SLOTS, CLS_X, CLS_STEP, CLS_SIZE = 1, 12, 30, 28
+cls_slots = [ipanel('ClsSlot%d' % (i + 1), CLS_X + i * CLS_STEP, 85, CLS_SIZE,
+                    'Textures/Cls_Warrior.Stretch.(WidgetLayerSimpleTexture).xdb', visible=False) for i in range(CLS_SLOTS)]
 CHIP_LABELS = {'neu': 'Нейтральный', 'pos': 'Положительный', 'neg': 'Отрицательный'}
 card_chips = []
 for i, (k, col, key) in enumerate(MARKS):
@@ -518,7 +554,8 @@ X.panel('EditorLayer', PL(0, 0, None, None, 'WIDGET_ALIGN_BOTH', 'WIDGET_ALIGN_B
         children=['EdScrim.(WidgetPanel).xdb', 'Editor.(WidgetPanel).xdb'], visible=False, priority=100)
 
 X.panel('CardWindow', PL(930, 60, CW, CH), back=WIN_FRAME,
-        children=card_hdr + ['CardDot.(WidgetPanel).xdb', 'CardNick.(WidgetTextView).xdb', 'CardInfo.(WidgetTextView).xdb'] + card_chips +
+        children=card_hdr + ['CardDot.(WidgetPanel).xdb', 'CardNick.(WidgetTextView).xdb', 'CardInfo.(WidgetTextView).xdb'] + cls_slots +
+        card_chips +
         ['CardLine.(WidgetPanel).xdb'] + fields + name_rows + guild_rows +
         ['NotesTitle.(WidgetTextView).xdb', note_add, 'NotesArea.(WidgetPanel).xdb'] + note_cards +
         ['NotesEmpty.(WidgetTextView).xdb', notes_empty_add, 'NotesMore.(WidgetTextView).xdb', card_delete, 'EditorLayer.(WidgetPanel).xdb'],
