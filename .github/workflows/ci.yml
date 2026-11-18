@@ -34,3 +34,19 @@ jobs:
         with:
           name: MyContacts-pak
           path: out/MyContacts.pak
+      # Отладочная сборка — только для проверки доработок в игре (pull request), в выпуск не попадает.
+      # Проверки «нет pcall и отладки» выше относятся только к обычной сборке.
+      - name: Отладочная сборка (с Probe.lua)
+        if: github.event_name == 'pull_request'
+        env:
+          ALLODS_DEBUG: '1'
+        run: |
+          python gen/assemble.py out/debug/MyContacts
+          test -e out/debug/MyContacts/Scripts/Probe.lua
+          grep -q 'Scripts/Probe.lua' 'out/debug/MyContacts/AddonDesc.(UIAddon).xdb'
+          python gen/pak.py out/debug/MyContacts out/debug/MyContacts.pak
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request'
+        with:
+          name: MyContacts-debug-pak
+          path: out/debug/MyContacts.pak
