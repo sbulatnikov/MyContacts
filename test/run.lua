@@ -270,5 +270,137 @@ check( FIND( "SetWipe" ).enabled == false, "«Очистить базу» вык
 MC.DB.Load()
 check( MC.DB.Count() == 0, "после очистки загрузка пустая" )
 
+-- 14. Карточка: эмблема текущего класса слева от строки сведений
+local SH = "Нить судьбы"
+local function meet( id, name, uid, cls )
+	UNITS[ id ] = { name = name, shard = SH, fac = "Лига", cls = cls, gs = 30000 }
+	STATE.group = { { name = name, uid = UID( uid ) } }
+	EVENTS.EVENT_GROUP_MEMBER_ADDED( {} ) second()
+	STATE.group = {}
+	EVENTS.EVENT_GROUP_MEMBER_REMOVED( {} ) second()
+	EVENTS.EVENT_UNITS_CHANGED( { spawned = { id } } )
+	return MC.DB.FindByName( name, MC.DB.DictId( "shard", SH ) )
+end
+local cm = meet( 50, "Классный", "c1", "MAGE" )
+MC.UI.OpenCard( cm )
+check( cm and FIND( "ClsSlot1" ).visible and FIND( "ClsSlot1" ).tex == "tex:CLS_MAGE", "карточка: эмблема текущего класса (" .. tostring( FIND( "ClsSlot1" ).tex ) .. ")" )
+check( FIND( "CardInfo" ).pl.posX == 46 and string.find( FIND( "CardInfo" ).val, "Маг", 1, true ), "карточка: сведения сдвинуты за эмблему, класс назван текстом" )
+local noCls = MC.DB.AddManual( "Бесклассовый", SH )
+MC.UI.OpenCard( noCls )
+check( not FIND( "ClsSlot1" ).visible and FIND( "CardInfo" ).pl.posX == 12, "карточка: класс неизвестен — эмблемы нет, сведения на месте" )
+local odd = meet( 51, "Новичок", "c2", "SOMENEWCLASS" )
+MC.UI.OpenCard( odd )
+check( not FIND( "ClsSlot1" ).visible and string.find( FIND( "CardInfo" ).val, "SOMENEWCLASS", 1, true ), "карточка: класс без эмблемы остаётся текстом" )
+MC.UI.CloseCard()
+
+-- 15. Пул классов: копится по ID, без повторов, хранится в хвосте записи, старая база читается как есть
+local hour = 22
+local function reclass( cls )
+	hour = hour + 1
+	DATE = { y = 2026, m = 11, d = 14 + math.floor( hour / 24 ), h = hour % 24, min = 0 }
+	UNITS[ 50 ].cls = cls
+	EVENTS.EVENT_UNITS_CHANGED( { spawned = { 50 } } )
+	return table.concat( MC.DB.Classes( cm ), "," )
+end
+local function stored( key )
+	for name, chunk in pairs( CONFIG ) do
+		if string.find( name, "^MyContacts_DB_" ) and chunk[ key ] then return chunk[ key ], name end
+	end
+end
+local function fields( s ) return select( 2, string.gsub( s, "|", "" ) ) + 1 end
+check( table.concat( MC.DB.Classes( cm ), "," ) == "Маг" and cm.cp == nil, "пул классов: один класс — списка прежних нет" )
+check( reclass( "DRUID" ) == "Друид,Маг", "пул классов: смена класса — прежний остаётся в пуле" )
+check( reclass( "DRUID" ) == "Друид,Маг", "пул классов: тот же класс повторно ничего не меняет" )
+check( reclass( "MAGE" ) == "Маг,Друид", "пул классов: возврат к прежнему — без повторов" )
+check( reclass( "WARRIOR" ) == "Воин,Маг,Друид", "пул классов: третий класс, недавние первыми" )
+MC.DB.Flush()
+local packed = stored( "U0x6331" )
+local ids = MC.DB.DictId( "cls", "Маг" ) .. "," .. MC.DB.DictId( "cls", "Друид" )
+check( packed and fields( packed ) == 16 and string.sub( packed, -( #ids + 3 ) ) == "|c=" .. ids, "пул классов: прежние классы — в хвосте записи (" .. tostring( packed ) .. ")" )
+check( fields( stored( odd.k ) ) == 15, "пул классов: у игрока с одним классом запись не выросла" )
+MC.DB.Load()
+cm = MC.DB.FindByUid( "0x6331" )
+check( cm and table.concat( MC.DB.Classes( cm ), "," ) == "Воин,Маг,Друид", "пул классов переживает загрузку" )
+MC.UI.OpenCard( cm )
+check( FIND( "ClsSlot1" ).tex == "tex:CLS_WARRIOR" and FIND( "ClsSlot1" ).fade == 1 and FIND( "ClsSlot2" ).tex == "tex:CLS_MAGE"
+	and FIND( "ClsSlot2" ).fade == 0.45 and FIND( "ClsSlot3" ).tex == "tex:CLS_DRUID" and FIND( "ClsSlot3" ).visible
+	and not FIND( "ClsSlot4" ).visible, "карточка: ряд эмблем — текущий класс первым, прежние приглушены" )
+check( FIND( "CardInfo" ).pl.posX == 12 + 3 * 30 + 4, "карточка: сведения сдвинуты за три эмблемы" )
+MC.UI.CloseCard()
+-- запись из более новой версии: незнакомые поля хвоста не теряются при перезаписи
+local _, chunkName = stored( "U0x6331" )
+CONFIG[ chunkName ][ "U0x6331" ] = packed .. "|a3=1850|zz=x,y"
+MC.DB.Load()
+cm = MC.DB.FindByUid( "0x6331" )
+MC.DB.SetMark( cm, 1 )
+MC.DB.Flush()
+local again = stored( "U0x6331" )
+check( string.find( again, "|c=" .. ids .. "|a3=1850|zz=x,y", 1, true ) ~= nil, "хвост записи: незнакомые поля сохранены как были (" .. again .. ")" )
+-- база от версии 0.9.2 (15 полей, без хвоста): формат тот же, ничего не очищается и не теряется
+local total = MC.DB.Count()
+CONFIG[ chunkName ][ "U0x6331" ] = string.match( again, "^(.-)|c=" )
+MC.DB.Load()
+cm = MC.DB.FindByUid( "0x6331" )
+check( CONFIG.MyContacts_Meta.v == 2 and MC.DB.Count() == total and cm and cm.mark == 1 and cm.name == "Классный" and cm.gs == 30000
+	and table.concat( MC.DB.Classes( cm ), "," ) == "Воин" and cm.cp == nil and cm.ext == nil, "старая база (0.9.2) читается без очистки и потерь" )
+check( reclass( "BARD" ) == "Бард,Воин", "старая запись: пул начинает копиться со следующей смены класса" )
+DATE = { y = 2026, m = 11, d = 13, h = 22, min = 0 }
+
+-- 16. Заметки: блок по высоте текста, заметка в 300 знаков целиком, многострочный ввод
+check( MC.LineCount( "Сливает лут", 224 ) == 1 and MC.LineCount( "", 224 ) == 1, "расчёт строк: короткий текст — одна строка" )
+check( MC.LineCount( "фывафлыовадфлываодф", 188 ) == 2 and MC.LineCount( "фывафлыовадфлываод", 188 ) == 1,
+	"расчёт строк: как на снимке экрана — 18 широких букв в 188 px, 19-я переносится" )
+check( MC.LineCount( "раз два три", 60 ) == 2 and MC.LineCount( string.rep( "Щ", 300 ), 480 ) == 10,
+	"расчёт строк: перенос по словам; 300 самых широких букв — 10 строк поля ввода" )
+local nt = MC.DB.AddManual( "Заметочник", SH )
+MC.UI.OpenCard( nt )
+local function typeNote( text )
+	click( "mc_note_add", "NoteAdd" )
+	FIND( "EdEdit" ).text = text
+	REACTIONS.mc_ed_changed( {} )
+	local counter = FIND( "EdCount" ).val
+	click( "mc_ed_save", "EdSave" )
+	return counter
+end
+local function card( i ) return FIND( "NoteCard" .. i ) end
+local long = string.rep( "Кидает группу посреди подземелья и забирает вещи. ", 6 )
+long = string.sub( long, 1, #long - 1 ) .. "!"       -- ровно 300 знаков
+check( MC.CharLen( long ) == 300, "заметка: проверочный текст — 300 знаков" )
+check( typeNote( long ) == "300 / 300" and not FIND( "EditorLayer" ).visible, "ввод: счётчик 300 / 300, заметка сохранена" )
+check( nt.notes and #nt.notes == 1 and nt.notes[ 1 ].t == long, "заметка в 300 знаков сохранена целиком" )
+local lines = MC.LineCount( long, 224 )
+local c1 = card( 1 )
+check( lines >= 10 and lines <= 14 and c1.visible and c1.pl.posY == 200 and c1.pl.sizeY == lines * 19 + 40,
+	"заметка в 300 знаков: блок вырос под текст (" .. lines .. " строк, " .. c1.pl.sizeY .. " px)" )
+check( c1:GetChildChecked( "NoteText" ).val == long and c1:GetChildChecked( "NoteText" ).pl.sizeY == lines * 19 + 4,
+	"заметка в 300 знаков: текст показан целиком, высота текста по числу строк" )
+check( MC.LineCount( string.rep( "Щ", 300 ), 224 ) * 19 + 40 > 432, "проверка запаса: 300 широких букв упираются в высоту области" )
+typeNote( string.rep( "Щ", 300 ) )
+check( card( 1 ).pl.sizeY == 432 and card( 1 ):GetChildChecked( "NoteText" ).pl.sizeY == 396 and not card( 2 ).visible,
+	"самая широкая заметка: блок на всю область (текст 396 px при нужных 342), следующая — прокруткой" )
+MC.DB.DelNote( nt, 1 )
+check( typeNote( "строка один\r\nстрока два" ) == "22 / 300" and nt.notes[ 1 ].t == "строка один строка два", "ввод: перевод строки из буфера — пробел" )
+check( card( 1 ).pl.sizeY == 59 and card( 2 ).visible and card( 2 ).pl.posY == 200 + 59 + 8 and card( 2 ).pl.sizeY == lines * 19 + 40,
+	"короткая заметка — блок в одну строку, длинная под ней" )
+for i = 1, 7 do typeNote( "заметка " .. i ) end
+-- 9 заметок: 8 коротких (59 + 8 px) и длинная в конце; в область входит 6 коротких
+check( card( 6 ).visible and FIND( "NotesMore" ).visible and FIND( "NotesMore" ).val == "ещё 3 — прокрутите колесом", "заметки: в область входит шесть коротких, остальные — прокруткой" )
+for _ = 1, 20 do REACTIONS.mc_notes_down( {} ) end
+local last
+for i = 1, 6 do if card( i ).visible then last = card( i ) end end
+check( last:GetChildChecked( "NoteText" ).val == long and last.pl.posY + last.pl.sizeY <= 200 + 432 and not FIND( "NotesMore" ).visible,
+	"заметки: прокрутка доходит до последней, длинная заметка видна целиком" )
+for _ = 1, 20 do REACTIONS.mc_notes_up( {} ) end
+check( card( 1 ):GetChildChecked( "NoteText" ).val == "заметка 7" and card( 1 ).pl.posY == 200, "заметки: прокрутка вверх возвращает к началу" )
+-- правка: изменённая заметка меняет высоту блока
+click( "mc_note_edit", "NoteCard1" )
+check( FIND( "EdEdit" ).text == "заметка 7", "правка: в поле ввода — текст заметки" )
+FIND( "EdEdit" ).text = long
+REACTIONS.mc_ed_changed( {} )
+click( "mc_ed_save", "EdSave" )
+check( nt.notes[ 1 ].t == long and nt.notes[ 1 ].e and card( 1 ).pl.sizeY == lines * 19 + 40 and string.find( card( 1 ):GetChildChecked( "NoteDate" ).val, "изм.", 1, true ),
+	"правка: блок вырос под новый текст, дата с пометкой об изменении" )
+MC.UI.CloseCard()
+
 print( fails == 0 and "ВСЁ ОК" or ( "ОШИБОК: " .. fails ) )
 os.exit( fails == 0 and 0 or 1 )   -- код выхода — для test/run.sh и проверок на GitHub

@@ -19,6 +19,20 @@ local ROWS, ROW_H, WHEEL_ROWS = 16, 28, 3
 local NAME_ROWS = 4         -- строк в «Ники»: первая — текущий, остальные — история
 local GUILD_ROWS = 5        -- строк в «Гильдии» (название слева, ранг справа): первая — текущая
 local TRACK_H = 450
+-- эмблемы классов в карточке (размеры — как в gen/build.py): первая — текущий класс,
+-- остальные — классы, на которых игрок был замечен раньше
+local CLS_SLOTS = 6
+local CLS_X, CLS_STEP, CLS_GAP = 12, 30, 4
+local CARD_W = 600
+-- заметки в карточке (числа — как в gen/build.py): блок заметки подстраивается под текст
+local NOTE_CARDS = 6                    -- блоков в пуле
+local NOTES_Y, NOTES_H = 200, 432       -- область заметок в окне карточки
+local NOTE_GAP = 8                      -- промежуток между блоками
+local NOTE_TEXT_W = 244                 -- ширина текста заметки
+local NOTE_FIT = 0.92                   -- запас: ширины символов в MC.LineCount приблизительные
+local NOTE_LINE_H = 19                  -- строка шрифта 16 (в игре шаг 18 px) с запасом
+local NOTE_TOP, NOTE_FOOT = 6, 30       -- отступ над текстом; место под дату и кнопки
+local NOTE_TEXT_PAD = 4                 -- запас высоты текста (выносные элементы последней строки)
 
 local filt = { neu = false, neg = false, pos = false, notes = false, recent = false }
 local search, searchL = "", ""
@@ -122,6 +136,8 @@ function UI.Init()
 	ui.cardDot = W( "CardDot" )
 	ui.cardNick = W( "CardNick" )
 	ui.cardInfo = W( "CardInfo" )
+	ui.clsSlots = {}
+	for i = 1, CLS_SLOTS do ui.clsSlots[ i ] = W( "ClsSlot" .. i ) end
 	ui.cardChips = { [ 0 ] = W( "CardMarkNeu" ), [ 1 ] = W( "CardMarkPos" ), [ -1 ] = W( "CardMarkNeg" ) }
 	ui.cardChipIcons = { [ 0 ] = W( "CardMarkNeuIcon" ), [ 1 ] = W( "CardMarkPosIcon" ), [ -1 ] = W( "CardMarkNegIcon" ) }
 	SetText( W( "CardMarkNeuText" ), "Нейтральный" )
@@ -145,7 +161,7 @@ function UI.Init()
 	end
 	ui.notesTitle = W( "NotesTitle" )
 	ui.noteCards = {}
-	for i = 1, 4 do
+	for i = 1, NOTE_CARDS do
 		local c = W( "NoteCard" .. i )
 		ui.noteCards[ i ] = { w = c, text = Child( c, "NoteText" ), date = Child( c, "NoteDate" ) }
 	end
@@ -426,6 +442,78 @@ function UI.GuildText( name, rank, unknown )
 	return name
 end
 
+-- Эмблемы классов слева от строки сведений: первая — текущий класс, прежние — приглушены.
+-- Строка сведений сдвигается на ширину показанных эмблем.
+-- names — названия классов (текущий первым). Класс, эмблемы которого в аддоне нет (новый в игре
+-- или имя не распознано), пропускаем: он остаётся текстом в строке сведений.
+local function RenderClasses( names )
+	local n = 0
+	for i, name in ipairs( names ) do
+		local sys = MC.CLASS_SYS[ name ]
+		if sys and n < CLS_SLOTS then
+			n = n + 1
+			SetTex( ui.clsSlots[ n ], "CLS_" .. sys )
+			Fade( ui.clsSlots[ n ], i == 1 and 1 or 0.45 )
+		end
+	end
+	for i = 1, CLS_SLOTS do Show( ui.clsSlots[ i ], i <= n ) end
+	local x = CLS_X + ( n > 0 and ( n * CLS_STEP + CLS_GAP ) or 0 )
+	MC.Place( ui.cardInfo, { posX = x, sizeX = CARD_W - 12 - x } )
+end
+
+-- Высота блока заметки по её тексту (кэш на заметку: пересчёт только когда текст изменился).
+-- Самый высокий блок — вся область заметок: в неё помещается заметка из 300 самых широких букв.
+local noteSize = setmetatable( {}, { __mode = "k" } )
+local function NoteHeight( n )
+	local c = noteSize[ n ]
+	if c and c.t == n.t then return c.h end
+	local lines = MC.LineCount( n.t or "", math.floor( NOTE_TEXT_W * NOTE_FIT ) )
+	local h = math.min( NOTES_H, NOTE_TOP + lines * NOTE_LINE_H + NOTE_TEXT_PAD + NOTE_FOOT )
+	noteSize[ n ] = { t = n.t, h = h }
+	return h
+end
+
+-- Высоты блоков, которые помещаются в область, если первой показать заметку off + 1.
+-- Первая показывается всегда; следующие — пока целиком входят и хватает блоков в пуле.
+local function NotesFit( notes, off )
+	local hs, y = {}, 0
+	for i = 1, NOTE_CARDS do
+		local n = notes[ off + i ]
+		if not n then break end
+		local h = NoteHeight( n )
+		if i > 1 and y + h > NOTES_H then break end
+		hs[ i ] = h
+		y = y + h + NOTE_GAP
+	end
+	return hs
+end
+
+local function RenderNotes( notes )
+	SetText( ui.notesTitle, "Заметки" )
+	if notesOff > #notes - 1 then notesOff = math.max( 0, #notes - 1 ) end
+	-- после удаления или правки: если с предыдущей заметки всё до конца списка помещается — показываем с неё
+	while notesOff > 0 and ( notesOff - 1 ) + #NotesFit( notes, notesOff - 1 ) >= #notes do notesOff = notesOff - 1 end
+	local hs = NotesFit( notes, notesOff )
+	local y = NOTES_Y
+	for i = 1, NOTE_CARDS do
+		local c, n, h = ui.noteCards[ i ], notes[ notesOff + i ], hs[ i ]
+		if h then
+			MC.Place( c.w, { posY = y, sizeY = h } )
+			MC.Place( c.text, { sizeY = h - NOTE_TOP - NOTE_FOOT } )
+			SetText( c.text, n.t or "" )
+			-- дата стоит слева от кнопок, места мало: у изменённой заметки — две даты без времени
+			SetText( c.date, n.e and ( MC.FmtDate( n.c ) .. " · изм. " .. MC.FmtDate( n.e ) ) or MC.FmtMin( n.c ) )
+			y = y + h + NOTE_GAP
+		end
+		Show( c.w, h ~= nil )
+	end
+	Show( ui.notesEmpty, #notes == 0 )
+	Show( ui.notesEmptyAdd, #notes == 0 )
+	local more = #notes - notesOff - #hs
+	Show( ui.notesMore, more > 0 )
+	if more > 0 then SetText( ui.notesMore, "ещё " .. more .. " — прокрутите колесом" ) end
+end
+
 local function RenderCard()
 	local r = cardRec
 	if not r or not ui.card:IsVisible() then return end
@@ -434,6 +522,7 @@ local function RenderCard()
 	SetText( ui.cardNick, r.name )
 	local parts = {}
 	local cls = DB.DictName( "cls", r.cls )
+	RenderClasses( DB.Classes( r ) )
 	if cls ~= "" then parts[ #parts + 1 ] = cls end
 	local shard = DB.DictName( "shard", r.sh )
 	if shard ~= "" then parts[ #parts + 1 ] = shard end
@@ -491,26 +580,7 @@ local function RenderCard()
 		end
 		Show( row.w, e ~= nil )
 	end
-	-- заметки
-	local notes = r.notes or {}
-	SetText( ui.notesTitle, "Заметки" )
-	local maxOff = math.max( 0, #notes - 4 )
-	if notesOff > maxOff then notesOff = maxOff end
-	for i = 1, 4 do
-		local c, n = ui.noteCards[ i ], notes[ notesOff + i ]
-		if n then
-			SetText( c.text, n.t or "" )
-			SetText( c.date, MC.FmtMin( n.c ) .. ( n.e and ( " · изменена " .. MC.FmtDate( n.e ) ) or "" ) )
-			Show( c.w, true )
-		else
-			Show( c.w, false )
-		end
-	end
-	Show( ui.notesEmpty, #notes == 0 )
-	Show( ui.notesEmptyAdd, #notes == 0 )
-	local more = #notes - notesOff - 4
-	Show( ui.notesMore, more > 0 )
-	if more > 0 then SetText( ui.notesMore, "ещё " .. more .. " — прокрутите колесом" ) end
+	RenderNotes( r.notes or {} )
 end
 
 function UI.OpenCard( r )
@@ -837,9 +907,10 @@ function UI.OnNotesUp()
 	if notesOff > 0 then notesOff = notesOff - 1 RenderCard() end
 end
 
+-- вниз листаем, пока последняя заметка не показана целиком
 function UI.OnNotesDown()
-	local n = cardRec and cardRec.notes and #cardRec.notes or 0
-	if notesOff < n - 4 then notesOff = notesOff + 1 RenderCard() end
+	local notes = cardRec and cardRec.notes or {}
+	if notesOff + #NotesFit( notes, notesOff ) < #notes then notesOff = notesOff + 1 RenderCard() end
 end
 
 function UI.OnNamesUp() if namesOff > 0 then namesOff = namesOff - 1 RenderCard() end end
@@ -858,8 +929,10 @@ local function NoteIndex( params )
 	return i and ( notesOff + i )
 end
 
+-- Текст из поля ввода. Поле многострочное только на вид (перенос по словам); если перевод строки
+-- всё же попал в текст (вставка из буфера), заменяем его пробелом: заметка хранится одной строкой.
 local function EdText()
-	return MC.Trim( S( ui.edEdit:GetText() ) )
+	return MC.Trim( ( string.gsub( S( ui.edEdit:GetText() ), "[\r\n]+", " " ) ) )
 end
 
 local function RenderEditor()
