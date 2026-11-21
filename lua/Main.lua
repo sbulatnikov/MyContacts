@@ -126,6 +126,7 @@ local function OnSlash( p )
 		MC.Chat( "отладка " .. ( MC.DEBUG and "включена: пишу в Personal\\Logs\\mods.txt" or "выключена" ) )
 		if MC.DEBUG then MC.Probe.Report() end
 	end
+	if text == "/mc rating" then MC.Probe.RatingCommand() end
 	--@end
 end
 
@@ -174,6 +175,7 @@ local function Start()
 	--@debug
 	for _, ev in ipairs( MC.Probe.EVENTS ) do On( ev, MC.Probe.Event( ev ) ) end
 	On( "EVENT_CHAT_MESSAGE", MC.Probe.Chat )
+	for ev, fn in pairs( MC.Probe.RATING_HANDLERS ) do On( ev, fn ) end
 	--@end
 	On( "EVENT_SECOND_TIMER", OnSecond )
 	On( "EVENT_UNKNOWN_SLASH_COMMAND", OnSlash )

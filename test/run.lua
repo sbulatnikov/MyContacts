@@ -19,6 +19,16 @@ local function chatHas( s )
 end
 local function second( n ) for _ = 1, n or 1 do NOW = NOW + 1000 EVENTS.EVENT_SECOND_TIMER( {} ) end end
 local function click( r, wname ) REACTIONS[ r ]( { widget = FIND( wname ), sender = wname } ) end
+-- сколько записей в mods.txt, начиная с номера from, содержат все перечисленные подстроки
+local function logCount( from, ... )
+	local n = 0
+	for i = from, #LOG do
+		local ok = true
+		for _, s in ipairs( { ... } ) do ok = ok and string.find( LOG[ i ], s, 1, true ) ~= nil end
+		if ok then n = n + 1 end
+	end
+	return n
+end
 
 -- 1. Старт: пустая база нового формата
 check( MC.DB.Count() == 0, "старт: база пуста" )
@@ -252,9 +262,104 @@ if MC.Probe then
 	end
 	MC.Probe.Report()
 	check( true, "отладка: Probe.Chat и Probe.Report без ошибок" )
+
+	-- Рейтинг арен: цель, повторы через 3 и 10 с, рядом, осмотр, команда, «недоступно» (ошибка заглушки остановит тест)
+	local season = { over_game = 40, wins = 25, score = 1500, top = 12, timeSpentMs = 3600000, difficulty = { name = WS_( "Золото" ) } }
+	local from = #LOG + 1
+	check( logCount( 1, "IsRatingPvPScoreAvailable -> true", "3x3=0", "6x6=1", "HPI=2" ) >= 1, "рейтинг: отчёт о доступности и перечислении" )
+	UNITS[ 50 ] = { name = "Аренщик", shard = "Нить судьбы", fac = "Империя", cls = "MAGE", gs = 0 }
+	RATING[ 50 ] = { [ ENUM_RatingArenaType_3x3 ] = { currentSeason = season, extra = 7 } }
+	STATE.target = 50
+	EVENTS.EVENT_AVATAR_TARGET_CHANGED( {} )
+	check( logCount( from, "рейтинг [цель #1] ник=Аренщик", "фракция=чужая (Империя)", "друг=false враг=true" ) == 1, "рейтинг: цель — ник и чужая фракция" )
+	check( logCount( from, "3x3 (тип=0): currentSeason={ over_game=40 wins=25 score=1500 top=12 timeSpentMs=3600000 difficulty=W\"Золото\" }" ) == 1,
+		"рейтинг: все поля текущего сезона" )
+	check( logCount( from, "lastSeason=nil" ) == 1 and logCount( from, "6x6 (тип=1): nil" ) == 1 and logCount( from, "(нет в документации) extra=7" ) == 1,
+		"рейтинг: nil для сезона и арены, лишнее поле отмечено" )
+	second( 3 )
+	check( logCount( from, "повтор через 3 с после «цель #1»", "без изменений" ) == 1, "рейтинг: повтор через 3 с — без изменений" )
+	RATING[ 50 ][ ENUM_RatingArenaType_6x6 ] = { currentSeason = { over_game = 0, wins = 0, score = 0, top = 0, timeSpentMs = 0 }, lastSeason = season }
+	second( 7 )
+	check( logCount( from, "повтор через 10 с после «цель #1», ОТВЕТ ИЗМЕНИЛСЯ" ) == 1 and logCount( from, "6x6 (тип=1): currentSeason={ over_game=0", "difficulty=nil" ) == 1,
+		"рейтинг: повтор через 10 с — данные пришли позже" )
+	STATE.target = nil
+	EVENTS.EVENT_AVATAR_TARGET_CHANGED( {} )
+	check( logCount( from, "рейтинг [цель #2]" ) == 0, "рейтинг: без цели записи нет" )
+
+	-- рядом: каждый ник один раз, не больше 10 на сторону; ушедший из видимости не перезапрашивается
+	from = #LOG + 1
+	local spawned = {}
+	for i = 1, 14 do
+		UNITS[ 100 + i ] = { name = "Свой" .. i, shard = "Нить судьбы", fac = "Лига", cls = "MAGE", gs = 0 }
+		spawned[ #spawned + 1 ] = 100 + i
+	end
+	spawned[ #spawned + 1 ] = 50
+	EVENTS.EVENT_UNITS_CHANGED( { spawned = spawned, despawned = {} } )
+	EVENTS.EVENT_UNITS_CHANGED( { spawned = spawned, despawned = {} } )
+	check( logCount( from, "рейтинг [рядом, своя #" ) == 10 and logCount( from, "рейтинг [рядом, чужая #1] ник=Аренщик" ) == 1,
+		"рейтинг: рядом — 10 своих и чужой, без повторов по нику" )
+	for i = 1, 14 do UNITS[ 100 + i ] = nil end
+	second( 10 )
+	check( logCount( from, "игрока уже не видно" ) == 20 and logCount( from, "«рядом, чужая #1»", "без изменений" ) == 2, "рейтинг: ушедших не запрашивает" )
+
+	-- осмотр: запрос по осматриваемому; осмотр недоступен — только запись об этом
+	from = #LOG + 1
+	STATE.inspect = 50
+	EVENTS.EVENT_INSPECT_STARTED( {} )
+	check( logCount( from, "рейтинг [осмотр #1] ник=Аренщик" ) == 1 and logCount( from, "осматривается=true" ) == 1, "рейтинг: после осмотра" )
+	STATE.inspect = nil
+	EVENTS.EVENT_INSPECT_STARTED( {} )
+	check( logCount( from, "рейтинг [осмотр #2]: осматриваемого игрока нет" ) == 1, "рейтинг: осмотр без игрока" )
+	STATE.inspectAllowed = false
+	EVENTS.EVENT_INSPECT_STARTED( {} )
+	check( logCount( from, "рейтинг [осмотр #3]: avatar.IsInspectAllowed()=false" ) == 1, "рейтинг: осмотр недоступен" )
+
+	-- рейтинг недоступен (часть активностей): функция не вызывается, в журнале — «false»
+	from = #LOG + 1
+	STATE.ratingAvailable = false
+	local calls = RATING_CALLS
+	STATE.target = 50
+	EVENTS.EVENT_AVATAR_TARGET_CHANGED( {} )
+	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
+	check( RATING_CALLS == calls and logCount( from, "IsRatingPvPScoreAvailable=false осматривается=недоступно" ) == 3, "рейтинг: «недоступно» — без запроса" )
+	STATE.ratingAvailable, STATE.inspectAllowed = true, true
+
+	-- команда: я сам и цель; без цели — запись об этом
+	from = #LOG + 1
+	CHAT = {}
+	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
+	check( logCount( from, "рейтинг [команда, я сам] ник=Я", "фракция=своя (Лига)" ) == 1 and logCount( from, "рейтинг [команда, цель] ник=Аренщик" ) == 1
+		and chatHas( "mods.txt" ), "рейтинг: команда /mc rating — я и цель" )
+	STATE.target = nil
+	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
+	check( logCount( from, "в цели нет другого игрока" ) == 1, "рейтинг: команда без цели" )
+	second( 10 )
+	-- выключенная отладка: ни запросов, ни записей
+	MC.DEBUG = false
+	from, calls, CHAT = #LOG + 1, RATING_CALLS, {}
+	STATE.target = 50
+	EVENTS.EVENT_AVATAR_TARGET_CHANGED( {} )
+	EVENTS.EVENT_INSPECT_STARTED( {} )
+	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
+	second( 10 )
+	check( RATING_CALLS == calls and #LOG == from - 1 and chatHas( "/mc debug" ), "рейтинг: при выключенной отладке ничего не запрашивает" )
+	MC.DEBUG = true
+	STATE.target, STATE.inspect = nil, nil
+	UNITS[ 50 ] = nil
 else
 	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc debug" ) } )
 	check( MC.DEBUG == nil and MC.Log == nil and MC.File == nil, "обычная сборка: отладки нет, /mc debug ничего не делает" )
+	-- обычная сборка рейтинг арен не запрашивает и команду /mc rating не знает
+	UNITS[ 50 ] = { name = "Аренщик", shard = "Нить судьбы", fac = "Империя", cls = "MAGE", gs = 0 }
+	STATE.target, STATE.inspect = 50, 50
+	EVENTS.EVENT_AVATAR_TARGET_CHANGED( {} )
+	EVENTS.EVENT_INSPECT_STARTED( {} )
+	EVENTS.EVENT_UNITS_CHANGED( { spawned = { 50 }, despawned = {} } )
+	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
+	second( 10 )
+	check( RATING_CALLS == 0 and #LOG == 0, "обычная сборка: рейтинг арен не запрашивается, в mods.txt пусто" )
+	STATE.target, STATE.inspect = nil, nil
+	UNITS[ 50 ] = nil
 end
 second( 60 )
 check( not MC.DB.IsDirty(), "раз в минуту база записывается" )

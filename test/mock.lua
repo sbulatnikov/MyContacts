@@ -19,6 +19,7 @@ function apitype( v )
 end
 
 CHAT = {}
+LOG = {}           -- всё, что аддон записал в mods.txt (common.LogInfo)
 CONFIG = {}
 function deep( t ) if rawtype( t ) ~= "table" or getmetatable( t ) then return t end local r = {} for k, v in pairs( t ) do r[ k ] = deep( v ) end return r end
 userMods = {
@@ -38,7 +39,11 @@ common = {
 	RegisterReactionHandler = function( f, r ) REACTIONS[ r ] = f end,
 	GetAbsTimeMs = function() return NOW end,
 	GetLocalDateTime = function() return deep( DATE ) end,
-	LogInfo = function( _, s ) if VERBOSE then print( "  [mods.txt] " .. ( rawtype( s ) == "table" and s.s or tostring( s ) ) ) end end,
+	LogInfo = function( _, s )
+		local line = rawtype( s ) == "table" and s.s or tostring( s )
+		LOG[ #LOG + 1 ] = line
+		if VERBOSE then print( "  [mods.txt] " .. line ) end
+	end,
 	GetAddonRelatedTextureGroup = function() return { HasTexture = function() return true end, GetTexture = function( _, k ) return "tex:" .. k end } end,
 	GetPosConverterParams = function() return {} end,
 	GetApiType = function() return "UniqueId" end,
@@ -79,27 +84,32 @@ function FIND( name ) return mainForm:GetChildChecked( name, true ) end
 -- Мир
 UID = function( n ) return { __uid = n, IsEqual = function( a, b ) return rawtype( b ) == "table" and a.__uid == b.__uid end,
 	GetInstanceId = function( a ) local h = "" for i = 1, #a.__uid do h = h .. string.format( "%02x", a.__uid:byte( i ) ) end return "userdata: 0x" .. h end } end
-ME = { name = "Я", id = 1 }
+ME = { name = "Я", id = 1, fac = "Лига" }
 UNITS = {}         -- [id] = { name, shard, fac, cls, gs }
-STATE = { group = {}, raid = false, guild = {}, target = nil }
+STATE = { group = {}, raid = false, guild = {}, target = nil, inspect = nil, inspectAllowed = true, ratingAvailable = true }
 avatar = {
-	IsInspectAllowed = function() return true end,
+	IsInspectAllowed = function() return STATE.inspectAllowed end,
 	IsExist = function() return true end,
 	GetId = function() return ME.id end,
 	GetUniqueId = function() return UID( "me" ) end,
 	GetTarget = function() return STATE.target end,
 	GetUnitList = function() local t = {} for id in pairs( UNITS ) do t[ #t + 1 ] = id end return t end,
-	GetInspectInfo = function() return nil end,
+	GetInspectInfo = function()
+		if not STATE.inspectAllowed then error( "GetInspectInfo: осмотр недоступен" ) end
+		return { rank = 1, playerId = STATE.inspect }
+	end,
 }
 object = {
 	IsExist = function( id ) return id == ME.id or UNITS[ id ] ~= nil end,
 	GetName = function( id ) if id == ME.id then return WSt( ME.name ) end return WSt( UNITS[ id ].name ) end,
+	IsFriend = function( id ) return id == ME.id or UNITS[ id ].fac == ME.fac end,
+	IsEnemy = function( id ) return id ~= ME.id and UNITS[ id ].fac ~= ME.fac end,
 }
 unit = {
 	IsPlayer = function( id ) return id == ME.id or UNITS[ id ] ~= nil end,
 	IsPet = function() return false end,
 	GetPlayerShardName = function( id ) return WSt( UNITS[ id ] and UNITS[ id ].shard or "Нить судьбы" ) end,
-	GetFactionId = function( id ) local u = UNITS[ id ] return { GetInfo = function() return { name = WSt( u.fac ) } end } end,
+	GetFactionId = function( id ) local u = id == ME.id and ME or UNITS[ id ] return { GetInfo = function() return { name = WSt( u.fac ) } end } end,
 	GetClass = function( id ) return { className = UNITS[ id ].cls } end,
 	GetGearScore = function( id ) return UNITS[ id ].gs end,
 	GetGuildInfo = function( id ) local g = UNITS[ id ].guild if not g then return nil end return { name = WSt( g ), rank = UNITS[ id ].rank } end,
@@ -116,6 +126,20 @@ guild = {
 	IsExist = function() return true end,
 	GetMembers = function() local t = {} for i, n in ipairs( STATE.guild ) do t[ #t + 1 ] = i end return t end,
 	GetMemberInfo = function( i ) return { name = WSt( STATE.guild[ i ] ) } end,
+}
+-- Рейтинг арен: RATING[ id юнита ][ тип арены ] = ответ игры (nil — данных нет).
+-- Запрос при IsRatingPvPScoreAvailable() == false здесь — ошибка: аддон обязан проверять заранее.
+ENUM_RatingArenaType_3x3, ENUM_RatingArenaType_6x6, ENUM_RatingArenaType_HPI = 0, 1, 2
+RATING = {}
+RATING_CALLS = 0
+matchMaking = {
+	IsRatingPvPScoreAvailable = function() return STATE.ratingAvailable end,
+	GetRatingPvPScoreByUnitId = function( arena, id )
+		if not STATE.ratingAvailable then error( "GetRatingPvPScoreByUnitId: рейтинг недоступен" ) end
+		if arena == nil or not ( id == ME.id or UNITS[ id ] ) then error( "GetRatingPvPScoreByUnitId: плохие параметры" ) end
+		RATING_CALLS = RATING_CALLS + 1
+		return RATING[ id ] and deep( RATING[ id ][ arena ] )
+	end,
 }
 CHAT_TYPE_WHISPER = 7
 WIDGET_ALIGN_LOW_ABS = 3
