@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ru"><head><meta charset="utf-8"><title>MyContacts 0.9.2</title><style>body{font-family:Segoe UI,Arial,sans-serif;max-width:820px;margin:32px auto;padding:0 20px;line-height:1.5;color:#222}
+<html lang="ru"><head><meta charset="utf-8"><title>MyContacts 0.9.3</title><style>body{font-family:Segoe UI,Arial,sans-serif;max-width:820px;margin:32px auto;padding:0 20px;line-height:1.5;color:#222}
 h1{font-size:26px;margin-bottom:4px}h2{font-size:20px;margin-top:28px;border-bottom:1px solid #ddd;padding-bottom:4px}h3{font-size:16px;margin-top:20px}
 table{border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;vertical-align:top}th{background:#f3f3f3}
 code{background:#f3f3f3;padding:1px 4px;border-radius:3px;font-family:Consolas,monospace;font-size:13px}hr{border:0;border-top:1px solid #e5e5e5;margin:24px 0}</style></head>
 <body>
-<h1>MyContacts 0.9.2</h1>
+<h1>MyContacts 0.9.3</h1>
 <p><strong>Автор:</strong> NoMercy</p>
 <p>Записная книжка игроков прямо в игре: отметки, заметки, история ников
 и гильдий — и предупреждение в чат, если рядом снова тот, кого вы
@@ -34,6 +34,9 @@ code{background:#f3f3f3;padding:1px 4px;border-radius:3px;font-family:Consolas,m
 <li><strong>Заметки</strong> с датой, до 300 символов каждая.</li>
 <li><strong>Гильдия и ранг</strong> — по последней встрече, когда игра
 отдала эти данные.</li>
+<li><strong>Классы.</strong> В карточке — эмблема класса игрока. Если он
+встречался вам на разных классах, эмблемы идут в ряд: текущий первым,
+прежние приглушены.</li>
 <li><strong>История ников.</strong> Сменил ник — карточка, отметка и
 заметки остаются с ним, прежний ник уходит в историю.</li>
 <li><strong>История гильдий</strong> — каждая гильдия один раз, с
@@ -109,11 +112,12 @@ code{background:#f3f3f3;padding:1px 4px;border-radius:3px;font-family:Consolas,m
 отдельных игроков — только события игры.</li>
 </ul>
 <hr />
-<h2>Что нового в 0.9.2</h2>
+<h2>Что нового в 0.9.3</h2>
 <ul>
-<li>Код переписан без перехвата ошибок (<code>pcall</code>): вместо него — проверки перед каждым вызовом игры, как описано в документации API.</li>
-<li>Из аддона убраны отладочный режим и калибровка лички.</li>
-<li>Рейтинг экипировки и данные осмотра не запрашиваются там, где игра их не даёт (PvP-активности с голосованием за изгнание).</li>
-<li>Имя аддона в менеджере дополнений — с версией.</li>
+<li>В карточке игрока — игровая эмблема его класса.</li>
+<li>Аддон запоминает классы, на которых встречал игрока: в карточке ряд эмблем, текущий класс первым, прежние приглушены (до шести).</li>
+<li>Заметки показываются целиком: блок подстраивается под текст, заметка в 300 знаков больше не обрезается.</li>
+<li>Поле ввода заметки стало многострочным; Enter по-прежнему сохраняет.</li>
+<li>База при обновлении не очищается.</li>
 </ul>
 </body></html>
