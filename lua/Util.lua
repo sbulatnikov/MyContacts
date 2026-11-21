@@ -4,7 +4,7 @@
 --------------------------------------------------------------------------------
 Global( "MC", {} )
 
-MC.VERSION = "0.9.2"
+MC.VERSION = "0.9.3"
 MC.tick = 0               -- секунды с запуска (EVENT_SECOND_TIMER)
 MC.NICK_MIN = 3
 MC.NICK_MAX = 14
