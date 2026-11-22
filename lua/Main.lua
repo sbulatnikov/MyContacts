@@ -46,6 +46,7 @@ end
 
 local CLICKS = {
 	mc_main = OnMain,
+	mc_main_right = UI.OnButtonTarget,
 	mc_close = function() UI.ShowWindow( false ) if DB.IsDirty() then DB.Flush() end end,
 	mc_gear = UI.OnGear,
 	mc_search_clear = UI.OnSearchClear,
@@ -175,7 +176,6 @@ local function Start()
 	--@debug
 	for _, ev in ipairs( MC.Probe.EVENTS ) do On( ev, MC.Probe.Event( ev ) ) end
 	On( "EVENT_CHAT_MESSAGE", MC.Probe.Chat )
-	for ev, fn in pairs( MC.Probe.RATING_HANDLERS ) do On( ev, fn ) end
 	--@end
 	On( "EVENT_SECOND_TIMER", OnSecond )
 	On( "EVENT_UNKNOWN_SLASH_COMMAND", OnSlash )

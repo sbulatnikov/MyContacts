@@ -17,7 +17,9 @@ UI.view = "main"
 
 local ROWS, ROW_H, WHEEL_ROWS = 16, 28, 3
 local NAME_ROWS = 4         -- строк в «Ники»: первая — текущий, остальные — история
-local GUILD_ROWS = 5        -- строк в «Гильдии» (название слева, ранг справа): первая — текущая
+local GUILD_ROWS = 4        -- строк в «Гильдии» (название слева, ранг справа): первая — текущая
+-- рейтинг арен в карточке: поле записи (DB.lua), имя строки виджетов (gen/build.py), подпись
+local ARENAS = { { key = "a3", row = "FA3", label = "3х3" }, { key = "a6", row = "FA6", label = "6х6" } }
 local TRACK_H = 450
 -- эмблемы классов в карточке (размеры — как в gen/build.py): первая — текущий класс,
 -- остальные — классы, на которых игрок был замечен раньше
@@ -148,6 +150,11 @@ function UI.Init()
 	SetText( W( "FGuildLabel" ), "Гильдия" )
 	SetText( W( "FRankLabel" ), "Ранг" )
 	SetText( W( "FUidLabel" ), "UID" )
+	ui.arenas = {}
+	for i, a in ipairs( ARENAS ) do
+		ui.arenas[ i ] = { score = W( a.row .. "Score" ), info = W( a.row .. "Info" ) }
+		SetText( W( a.row .. "Label" ), a.label )
+	end
 	ui.namesTitle = W( "NamesTitle" )
 	ui.guildsTitle = W( "GuildsTitle" )
 	ui.nameRows, ui.guildRows = {}, {}
@@ -442,6 +449,26 @@ function UI.GuildText( name, rank, unknown )
 	return name
 end
 
+-- Строка рейтинга арены в карточке: «<арена> <счёт> #<место> <побед>/<игр>(<доля побед>%)».
+-- Счёт — главное (отдельное поле, цветом акцента); остальное — пояснение. Даты в строке нет.
+-- a — r.a3 или r.a6; nil — игр в сезоне нет или рейтинг ещё не читался (в базе это не различается).
+function UI.ArenaTexts( a )
+	if not a then return "—", "нет данных" end
+	local info = "#" .. ( a.t > 0 and tostring( a.t ) or "—" ) .. " " .. a.w .. "/" .. a.g
+	-- Ожидаем: счёт есть, а игр ноль (игра прислала неполные данные) — долю побед не считаем
+	if a.g > 0 then info = info .. "(" .. math.floor( a.w * 100 / a.g + 0.5 ) .. "%)" end
+	return MC.Num( a.s ), info
+end
+
+local function RenderArenas( r )
+	for i, a in ipairs( ARENAS ) do
+		local row = ui.arenas[ i ]
+		local score, info = UI.ArenaTexts( r[ a.key ] )
+		SetText( row.score, score )
+		SetText( row.info, info )
+	end
+end
+
 -- Эмблемы классов слева от строки сведений: первая — текущий класс, прежние — приглушены.
 -- Строка сведений сдвигается на ширину показанных эмблем.
 -- names — названия классов (текущий первым). Класс, эмблемы которого в аддоне нет (новый в игре
@@ -538,6 +565,7 @@ local function RenderCard()
 	local gname = r.g and DB.DictName( "guild", r.g )
 	SetText( ui.fields.guild, GuildName( gname, r.g == nil ) )
 	SetText( ui.fields.rank, ( gname and gname ~= "" and RankName( r.gr ) ) or "—" )
+	RenderArenas( r )
 	-- ники: текущий, затем прежние (новые сверху)
 	local names = r.names or {}
 	SetText( ui.namesTitle, "Ники" )
@@ -735,15 +763,26 @@ function UI.OnSort()
 	UI.Render()
 end
 
-function UI.OnTarget()
+-- Карточка игрока в цели; незнакомый игрок при этом записывается по нику.
+-- anchor — виджет, под которым показать причину, если карточку открыть нельзя.
+local function OpenTarget( anchor )
 	local r, err = MC.Game.TargetRecord()
 	if r then
 		listDirty = true
 		UI.OpenCard( r )
 		UI.Render()
 	else
-		UI.ShowTip( ui.target, err or "Нет цели", true, 3 )
+		UI.ShowTip( anchor, err or "Нет цели", true, 3 )
 	end
+end
+
+function UI.OnTarget()
+	OpenTarget( ui.target )
+end
+
+-- Правый клик по кнопке аддона: карточка игрока в цели сразу, главное окно не открывается
+function UI.OnButtonTarget()
+	OpenTarget( ui.button )
 end
 
 local FILTER_KEYS = { FNeu = "neu", FNeg = "neg", FPos = "pos", FNotes = "notes", FRecent = "recent" }

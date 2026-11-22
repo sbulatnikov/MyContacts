@@ -13,8 +13,8 @@
 -- Как расширять запись, не очищая базу. Строка записи — 15 постоянных полей через «|», за ними
 -- «хвост» из необязательных полей вида ключ=значение («…|m|c=3,7»). Версия аддона, которая ключа
 -- не знает, поле не теряет: хранит как есть (r.ext) и пишет обратно. Поэтому SCHEMA при добавлении
--- поля НЕ меняем (смена SCHEMA стирает базу у всех). Новое поле (например, рейтинги арен 3х3 и 6х6):
---   1) придумать короткий ключ из латинских букв и цифр («a3», «a6»);
+-- поля НЕ меняем (смена SCHEMA стирает базу у всех). Новое поле (так добавлены рейтинги арен a3 и a6):
+--   1) придумать короткий ключ из латинских букв и цифр;
 --   2) добавить его в TAIL: pack( r ) -> строка или nil (nil — поле не пишется, так у большинства
 --      игроков запись не растёт), unpack( r, значение );
 --   3) в значении нельзя «|» и перевод строки; числа и списки через запятую подходят.
@@ -98,9 +98,32 @@ end
 --------------------------------------------------------------------------------
 local FIXED = 15        -- число постоянных полей; всё, что дальше, — хвост
 
+-- a3, a6 — рейтинг игрока на аренах 3х3 и 6х6 в текущем сезоне (r.a3, r.a6):
+-- «счёт,место,игр,побед,когда прочитано» (когда — минуты от 2000 года, как остальные даты записи).
+-- У игрока без игр в сезоне поля нет: таких большинство, и запись у них не растёт.
+local ARENA_KEYS = { "a3", "a6" }
+
+local function ArenaField( key )
+	return {
+		pack = function( r )
+			local a = r[ key ]
+			if not a then return nil end
+			return table.concat( { a.s, a.t, a.g, a.w, a.at }, "," )
+		end,
+		unpack = function( r, v )
+			local s, t, g, w, at = string.match( v, "^(%d+),(%d+),(%d+),(%d+),(%d+)$" )
+			-- Ожидаем: значение не в нашем виде (запись испорчена) — рейтинга у записи нет, прочитается при встрече
+			if not s then return end
+			r[ key ] = { s = tonumber( s ), t = tonumber( t ), g = tonumber( g ), w = tonumber( w ), at = tonumber( at ) }
+		end,
+	}
+end
+
 -- c — прежние классы игрока (номера словаря cls через запятую, недавние первыми).
 -- Текущий класс лежит в постоянном поле cls, поэтому у игрока с одним классом хвоста нет.
 local TAIL = {
+	a3 = ArenaField( "a3" ),
+	a6 = ArenaField( "a6" ),
 	c = {
 		pack = function( r )
 			if not r.cp or #r.cp == 0 then return nil end
@@ -405,6 +428,41 @@ function DB.Classes( r )
 end
 
 --------------------------------------------------------------------------------
+-- Рейтинг арен: r.a3 и r.a6 = { s = счёт, t = место, g = игр, w = побед, at = когда прочитано }.
+-- Нет игр в сезоне (все числа — нули) — поля у записи нет.
+--------------------------------------------------------------------------------
+local ARENA_FRESH = 1440    -- минут: при тех же числах момент чтения обновляем не чаще раза в сутки
+
+--@debug
+local function ArenaText( a )
+	if not a then return "нет" end
+	return "счёт " .. a.s .. ", место " .. a.t .. ", игр " .. a.g .. ", побед " .. a.w
+end
+--@end
+
+-- Новое значение рейтинга одной арены: v = { s, t, g, w } — что отдала игра при встрече.
+-- Возвращает true, если запись изменилась и её нужно сохранить.
+local function SetArena( r, key, v, now )
+	local old = r[ key ]
+	local was = ArenaText( old ) --@debug
+	if v.s == 0 and v.t == 0 and v.g == 0 and v.w == 0 then
+		-- игр в сезоне нет: если рейтинг был — начался новый сезон, прежнее значение убираем
+		if not old then return false end
+		r[ key ] = nil
+	elseif old and old.s == v.s and old.t == v.t and old.g == v.g and old.w == v.w then
+		-- Числа те же. Момент чтения сам по себе — не повод переписывать базу при каждой встрече:
+		-- обновляем его раз в сутки, чтобы в карточке было видно, что значение недавно подтверждено.
+		if now - old.at < ARENA_FRESH then return false end
+		old.at = now
+		return true
+	else
+		r[ key ] = { s = v.s, t = v.t, g = v.g, w = v.w, at = now }
+	end
+	MC.Log( "рейтинг арены", key, "изменился:", r.name, r.k, "было:", was, "стало:", ArenaText( r[ key ] ) ) --@debug
+	return true
+end
+
+--------------------------------------------------------------------------------
 -- Изменения
 --------------------------------------------------------------------------------
 local function Rekey( r, newKey )
@@ -419,6 +477,11 @@ end
 local function Merge( dst, src )
 	if ( src.seen or 0 ) > ( dst.seen or 0 ) then dst.seen, dst.zone, dst.how = src.seen, src.zone, src.how end
 	if ( src.gsAt or 0 ) > ( dst.gsAt or 0 ) then dst.gs, dst.gsAt = src.gs, src.gsAt end
+	-- рейтинг арен — тот, что прочитан позже
+	for _, key in ipairs( ARENA_KEYS ) do
+		local a = src[ key ]
+		if a and ( not dst[ key ] or a.at > dst[ key ].at ) then dst[ key ] = a end
+	end
 	if src.first and src.first > 0 and ( not dst.first or dst.first == 0 or src.first < dst.first ) then dst.first = src.first end
 	if ( dst.mark or 0 ) == 0 then dst.mark = src.mark end
 	if src.notes then
@@ -443,6 +506,8 @@ end
 -- Встреча с игроком.
 -- info: name (строка), shard (строка), uid (UniqueId или nil), fac, cls (строка), gs, how, zone (строка),
 --       guild (строка; "" — без гильдии; nil — неизвестно), rank (число),
+--       a3, a6 (рейтинг арен 3х3 и 6х6: { s = счёт, t = место, g = игр, w = побед }; nil — игра данных не дала,
+--       прежнее значение остаётся),
 --       create (можно завести новую запись — только если есть UID),
 --       noSeen (не считать встречей: только UID и ник)
 -- Без UID запись только находится по нику и обновляется, новая не создаётся.
@@ -507,6 +572,9 @@ function DB.Touch( info, now )
 		if SetClass( r, c ) then changed = true end
 	end
 	if info.gs and info.gs > 0 and r.gs ~= info.gs then r.gs, r.gsAt = info.gs, now changed = true end
+	for _, key in ipairs( ARENA_KEYS ) do
+		if info[ key ] ~= nil and SetArena( r, key, info[ key ], now ) then changed = true end
+	end
 	-- гильдия и ранг: только когда игра отдала данные (info.guild == "" — без гильдии, nil — неизвестно)
 	if info.guild ~= nil then
 		local g = DB.DictId( "guild", info.guild )

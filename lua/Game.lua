@@ -5,6 +5,8 @@
 -- Новые записи — только с постоянным ID: группа, отряд, личка (входящая и исходящая),
 -- любой канал чата (настройка collectChat).
 -- Рядом, цель, осмотр — только обновляют тех, кто уже есть в базе.
+-- Рейтинг арен 3х3 и 6х6 читается там же и по тем же правилам, что рейтинг экипировки:
+-- при встрече, у игрока рядом; сам по себе новых записей не создаёт.
 --------------------------------------------------------------------------------
 MC.Game = {}
 local G = MC.Game
@@ -76,6 +78,32 @@ local function GearScore( id )
 	return nil
 end
 
+-- Рейтинг игрока на одной рейтинговой арене в текущем сезоне: { s = счёт, t = место, g = игр, w = побед }.
+-- Игра отвечает сразу и для любого игрока рядом, своей и чужой фракции; осмотр не нужен (проверено в игре).
+-- У игрока без игр в сезоне приходит сезон с нулями — так и отдаём: хранить или убрать, решает DB.lua.
+local function Count( v )
+	-- Ожидаем: числа в ответе описаны как целые; если поля нет или оно не число — считаем нулём
+	if type( v ) ~= "number" or v < 0 then return 0 end
+	return math.floor( v + 0.5 )
+end
+
+local function ArenaSeason( arena, id )
+	local info = matchMaking.GetRatingPvPScoreByUnitId( arena, id )
+	-- Ожидаем: nil, если игра не дала данных («table or nil» в документации) — прежнее значение в базе остаётся
+	if type( info ) ~= "table" then return nil end
+	local season = info.currentSeason
+	if type( season ) ~= "table" then return nil end
+	return { s = Count( season.score ), t = Count( season.top ), g = Count( season.over_game ), w = Count( season.wins ) }
+end
+
+-- Рейтинг игрока рядом на аренах 3х3 и 6х6 (прошлый сезон игра не отдаёт, «Двоеборье» не записываем)
+local function ArenaRating( id )
+	-- Ожидаем: в части активностей рейтинг аддонам недоступен (так в документации
+	-- matchMaking.GetRatingPvPScoreByUnitId) — проверяем IsRatingPvPScoreAvailable и не запрашиваем
+	if not matchMaking.IsRatingPvPScoreAvailable() then return nil, nil end
+	return ArenaSeason( ENUM_RatingArenaType_3x3, id ), ArenaSeason( ENUM_RatingArenaType_6x6, id )
+end
+
 -- Гильдия и ранг игрока рядом: строка гильдии ("" — без гильдии) и ранг; nil — игра данных не дала
 local function GuildOf( id )
 	local info = unit.GetGuildInfo( id )
@@ -138,9 +166,10 @@ local function SeenUnit( id, how, now )
 	-- если класс и гильдия уже известны: запись из группы или лички заполняется при первой встрече рядом
 	if how == "n" and now - ( known.seen or 0 ) < 10 and ( known.cls or 0 ) ~= 0 and known.g ~= nil then return known end
 	local gname, grank = GuildOf( id )
+	local a3, a6 = ArenaRating( id )
 	local r, isNew, old = DB.Touch( {
 		name = name, shard = shard, fac = FactionOf( id ), cls = ClassOf( id ), gs = GearScore( id ), how = how or "n",
-		guild = gname, rank = grank,
+		guild = gname, rank = grank, a3 = a3, a6 = a6,
 	}, now )
 	return Touched( r, isNew, old )
 end
@@ -233,6 +262,7 @@ local function ProcessRoster()
 			info.cls = ClassOf( m.id ) or ( m.cls and CLASS_RU[ string.upper( S( m.cls ) ) ] )
 			info.gs = GearScore( m.id )
 			info.guild, info.rank = GuildOf( m.id )
+			info.a3, info.a6 = ArenaRating( m.id )
 		end
 		local r, isNew, old = DB.Touch( info, now )
 		Touched( r, isNew, old )
@@ -304,13 +334,14 @@ local function WarnWhisper( r )
 end
 
 -- Если автор сообщения сейчас виден (senderId — объект рядом), дочитываем его данные:
--- класс, фракцию, ГС, гильдию и ранг. Для дальнего (мировой чат) senderId пуст или объекта нет.
+-- класс, фракцию, ГС, гильдию и ранг, рейтинг арен. Для дальнего (мировой чат) senderId пуст или объекта нет.
 local function AddUnitInfo( info, id )
 	if id == nil or id == myId then return info end
 	-- Ожидаем: автор далеко или уже ушёл из видимости — данные юнита не читаем
 	if not object.IsExist( id ) or not unit.IsPlayer( id ) then return info end
 	info.fac, info.cls, info.gs = FactionOf( id ), ClassOf( id ), GearScore( id )
 	info.guild, info.rank = GuildOf( id )
+	info.a3, info.a6 = ArenaRating( id )
 	return info
 end
 

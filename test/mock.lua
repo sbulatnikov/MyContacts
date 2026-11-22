@@ -127,7 +127,9 @@ guild = {
 	GetMembers = function() local t = {} for i, n in ipairs( STATE.guild ) do t[ #t + 1 ] = i end return t end,
 	GetMemberInfo = function( i ) return { name = WSt( STATE.guild[ i ] ) } end,
 }
--- Рейтинг арен: RATING[ id юнита ][ тип арены ] = ответ игры (nil — данных нет).
+-- Рейтинг арен: RATING[ id юнита ][ тип арены ] = ответ игры.
+-- Как в игре: у игрока, про которого ничего не задано, — сезон с нулями (игр нет), прошлого сезона нет.
+-- false вместо ответа (RATING[ id ] = false или RATING[ id ][ тип ] = false) — игра вернула nil.
 -- Запрос при IsRatingPvPScoreAvailable() == false здесь — ошибка: аддон обязан проверять заранее.
 ENUM_RatingArenaType_3x3, ENUM_RatingArenaType_6x6, ENUM_RatingArenaType_HPI = 0, 1, 2
 RATING = {}
@@ -138,7 +140,11 @@ matchMaking = {
 		if not STATE.ratingAvailable then error( "GetRatingPvPScoreByUnitId: рейтинг недоступен" ) end
 		if arena == nil or not ( id == ME.id or UNITS[ id ] ) then error( "GetRatingPvPScoreByUnitId: плохие параметры" ) end
 		RATING_CALLS = RATING_CALLS + 1
-		return RATING[ id ] and deep( RATING[ id ][ arena ] )
+		local answer = RATING[ id ]
+		if answer ~= nil and answer ~= false then answer = answer[ arena ] end
+		if answer == false then return nil end
+		if answer == nil then return { currentSeason = { over_game = 0, wins = 0, score = 0, top = 0, timeSpentMs = 0 } } end
+		return deep( answer )
 	end,
 }
 CHAT_TYPE_WHISPER = 7
