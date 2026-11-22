@@ -496,8 +496,8 @@ for i, nm in enumerate(('FGuild', 'FRank', 'FUid')):
     fields += [nm + 'Label.(WidgetTextView).xdb', nm + 'Value.(WidgetTextView).xdb']
 # рейтинг арен 3х3 и 6х6 — две строки под полями, всегда на своих местах (нет рейтинга — «нет данных»),
 # поэтому карточка не меняет раскладку от игрока к игроку. В строке шириной 288 px (x 12..300):
-#   подпись «3х3» 28 px · счёт (главное, цветом акцента) 46 px · «место 312 · 25 из 40» 140 px · дата справа 70 px.
-# Тексты и запасной короткий вид длинной строки — lua/UI.lua (ArenaTexts).
+#   подпись «3х3» 28 px · счёт (главное, цветом акцента) 46 px · «#312 25/40(63%)» — до правого края.
+# Даты в строке нет. Тексты — lua/UI.lua (ArenaTexts).
 # Место под эти строки: блоки «Ники» и «Гильдии» сдвинуты вниз на 52 px, а строк в «Гильдии» стало 4 вместо 5
 # (остальное — колесом), иначе список гильдий наезжал бы на кнопку «Удалить из базы» (y = 616).
 ARENA_Y, ARENA_STEP = 250, 26
@@ -505,9 +505,8 @@ for i, nm in enumerate(('FA3', 'FA6')):
     y = ARENA_Y + i * ARENA_STEP
     tv(nm + 'Label', 12, y, 28, 24, 'Small3')
     tv(nm + 'Score', 42, y, 46, 24, 'Score')
-    tv(nm + 'Info', 90, y, 140, 24, 'Small3')
-    tv(nm + 'Date', 230, y, LEFT_W - 230, 24, 'Small3R')
-    fields += [nm + s + '.(WidgetTextView).xdb' for s in ('Label', 'Score', 'Info', 'Date')]
+    tv(nm + 'Info', 90, y, LEFT_W - 90, 24, 'Small3')
+    fields += [nm + s + '.(WidgetTextView).xdb' for s in ('Label', 'Score', 'Info')]
 # ники и гильдии: первая строка — текущее, остальные — история (прокрутка колесом)
 NAME_ROWS, GUILD_ROWS = 4, 4
 

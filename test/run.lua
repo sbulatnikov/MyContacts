@@ -560,21 +560,21 @@ MC.DB.Load()
 ar = MC.DB.FindByUid( "0x6131" )
 check( ar and same( ar.a3, 987, 298, 40, 25 ) and ar.a3.at == T2 and same( ar.a6, 1440, 1190, 151, 81 ) and ar.a6.at == T2 + 60
 	and ar.ext and ar.ext[ 1 ] == "q9=1850", "рейтинг переживает загрузку базы, незнакомое поле сохранено" )
--- карточка: счёт, место и победы из игр, дата записи; большие числа — короткий вид
+-- карточка: «<арена> <счёт> #<место> <побед>/<игр>(<доля побед>%)», даты нет
 MC.UI.OpenCard( ar )
-local function arenaRow( name ) return FIND( name .. "Label" ).val, FIND( name .. "Score" ).val, FIND( name .. "Info" ).val, FIND( name .. "Date" ).val end
-local l3, s3, i3, d3 = arenaRow( "FA3" )
-local l6, s6, i6, d6 = arenaRow( "FA6" )
-print( "  карточка: " .. table.concat( { l3, s3, i3, d3 }, " | " ) .. "  //  " .. table.concat( { l6, s6, i6, d6 }, " | " ) )
-check( l3 == "3х3" and s3 == "987" and i3 == "место 298 · 25 из 40" and d3 == "22.11.2026", "карточка: рейтинг 3х3 — счёт, место, победы из игр, дата записи" )
-check( l6 == "6х6" and s6 == "1 440" and i6 == "место 1 190 · 81/151" and d6 == "22.11.2026", "карточка: рейтинг 6х6 — большие числа в коротком виде" )
+local function arenaRow( name ) return FIND( name .. "Label" ).val, FIND( name .. "Score" ).val, FIND( name .. "Info" ).val end
+local l3, s3, i3 = arenaRow( "FA3" )
+local l6, s6, i6 = arenaRow( "FA6" )
+print( "  карточка: " .. table.concat( { l3, s3, i3 }, " | " ) .. "  //  " .. table.concat( { l6, s6, i6 }, " | " ) )
+check( l3 == "3х3" and s3 == "987" and i3 == "#298 25/40(63%)", "карточка: рейтинг 3х3 — счёт, #место, победы/игры(доля побед)" )
+check( l6 == "6х6" and s6 == "1 440" and i6 == "#1190 81/151(54%)", "карточка: рейтинг 6х6 — большие числа" )
 -- новый сезон: пришли нули — прежний рейтинг убран, в карточке «нет данных»
 RATING[ 60 ] = { [ A3 ] = games( 0, 0, 0, 0 ) }
 see( 3080 )
 check( ar.a3 == nil and ar.a6 == nil and MC.DB.IsDirty(), "рейтинг: нули стирают прежнее значение" )
 second()
-l3, s3, i3, d3 = arenaRow( "FA3" )
-check( s3 == "—" and i3 == "нет данных" and d3 == "" and FIND( "FA6Info" ).val == "нет данных" and FIND( "FA6Label" ).val == "6х6",
+l3, s3, i3 = arenaRow( "FA3" )
+check( s3 == "—" and i3 == "нет данных" and FIND( "FA6Info" ).val == "нет данных" and FIND( "FA6Label" ).val == "6х6",
 	"карточка: рейтинга нет — «нет данных», строки на месте" )
 MC.UI.CloseCard()
 MC.DB.Flush()
@@ -595,7 +595,7 @@ check( stored( ar.k ) == "Аренщик|1|1|" .. T0 .. "|0|g|30000|" .. T0 .. "
 RATING[ 60 ] = { [ A6 ] = games( 15, 0, 1, 0 ) }
 see( 3100 )
 MC.UI.OpenCard( ar )
-check( same( ar.a6, 15, 0, 1, 0 ) and ar.a3 == nil and FIND( "FA6Info" ).val == "место — · 0 из 1" and FIND( "FA6Score" ).val == "15",
+check( same( ar.a6, 15, 0, 1, 0 ) and ar.a3 == nil and FIND( "FA6Info" ).val == "#— 0/1(0%)" and FIND( "FA6Score" ).val == "15",
 	"запись 0.9.4: рейтинг дописан при встрече; места ещё нет — прочерк" )
 MC.UI.CloseCard()
 UNITS[ 60 ], RATING[ 60 ] = nil, nil

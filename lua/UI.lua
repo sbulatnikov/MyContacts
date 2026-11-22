@@ -20,7 +20,6 @@ local NAME_ROWS = 4         -- строк в «Ники»: первая — те
 local GUILD_ROWS = 4        -- строк в «Гильдии» (название слева, ранг справа): первая — текущая
 -- рейтинг арен в карточке: поле записи (DB.lua), имя строки виджетов (gen/build.py), подпись
 local ARENAS = { { key = "a3", row = "FA3", label = "3х3" }, { key = "a6", row = "FA6", label = "6х6" } }
-local ARENA_INFO_MAX = 21   -- знаков в пояснении к счёту: столько входит в его поле (140 px, шрифт 14)
 local TRACK_H = 450
 -- эмблемы классов в карточке (размеры — как в gen/build.py): первая — текущий класс,
 -- остальные — классы, на которых игрок был замечен раньше
@@ -153,7 +152,7 @@ function UI.Init()
 	SetText( W( "FUidLabel" ), "UID" )
 	ui.arenas = {}
 	for i, a in ipairs( ARENAS ) do
-		ui.arenas[ i ] = { score = W( a.row .. "Score" ), info = W( a.row .. "Info" ), date = W( a.row .. "Date" ) }
+		ui.arenas[ i ] = { score = W( a.row .. "Score" ), info = W( a.row .. "Info" ) }
 		SetText( W( a.row .. "Label" ), a.label )
 	end
 	ui.namesTitle = W( "NamesTitle" )
@@ -450,25 +449,23 @@ function UI.GuildText( name, rank, unknown )
 	return name
 end
 
--- Строка рейтинга арены в карточке: счёт (главное), пояснение «место · побед из игр» и дата,
--- на которую значение записано (как гильдия — по последней встрече).
+-- Строка рейтинга арены в карточке: «<арена> <счёт> #<место> <побед>/<игр>(<доля побед>%)».
+-- Счёт — главное (отдельное поле, цветом акцента); остальное — пояснение. Даты в строке нет.
 -- a — r.a3 или r.a6; nil — игр в сезоне нет или рейтинг ещё не читался (в базе это не различается).
 function UI.ArenaTexts( a )
-	if not a then return "—", "нет данных", "" end
-	local place = "место " .. ( a.t > 0 and MC.Num( a.t ) or "—" )
-	local info = place .. " · " .. a.w .. " из " .. a.g
-	-- большие числа (место за тысячу и сотни игр) в поле не входят — тогда короче: «побед/игр»
-	if MC.CharLen( info ) > ARENA_INFO_MAX then info = place .. " · " .. a.w .. "/" .. a.g end
-	return MC.Num( a.s ), info, MC.FmtDate( a.at )
+	if not a then return "—", "нет данных" end
+	local info = "#" .. ( a.t > 0 and tostring( a.t ) or "—" ) .. " " .. a.w .. "/" .. a.g
+	-- Ожидаем: счёт есть, а игр ноль (игра прислала неполные данные) — долю побед не считаем
+	if a.g > 0 then info = info .. "(" .. math.floor( a.w * 100 / a.g + 0.5 ) .. "%)" end
+	return MC.Num( a.s ), info
 end
 
 local function RenderArenas( r )
 	for i, a in ipairs( ARENAS ) do
 		local row = ui.arenas[ i ]
-		local score, info, date = UI.ArenaTexts( r[ a.key ] )
+		local score, info = UI.ArenaTexts( r[ a.key ] )
 		SetText( row.score, score )
 		SetText( row.info, info )
-		SetText( row.date, date )
 	end
 end
 
