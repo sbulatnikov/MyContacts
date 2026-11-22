@@ -263,101 +263,63 @@ if MC.Probe then
 	MC.Probe.Report()
 	check( true, "отладка: Probe.Chat и Probe.Report без ошибок" )
 
-	-- Рейтинг арен: цель, повторы через 3 и 10 с, рядом, осмотр, команда, «недоступно» (ошибка заглушки остановит тест)
+	-- Команда /mc rating: полный ответ игры про себя и про цель; сама по себе отладка рейтинг в журнал не пишет
 	local season = { over_game = 40, wins = 25, score = 1500, top = 12, timeSpentMs = 3600000, difficulty = { name = WS_( "Золото" ) } }
-	local from = #LOG + 1
 	check( logCount( 1, "IsRatingPvPScoreAvailable -> true", "3x3=0", "6x6=1", "HPI=2" ) >= 1, "рейтинг: отчёт о доступности и перечислении" )
 	UNITS[ 50 ] = { name = "Аренщик", shard = "Нить судьбы", fac = "Империя", cls = "MAGE", gs = 0 }
-	RATING[ 50 ] = { [ ENUM_RatingArenaType_3x3 ] = { currentSeason = season, extra = 7 } }
-	STATE.target = 50
+	RATING[ 50 ] = { [ ENUM_RatingArenaType_3x3 ] = { currentSeason = season, extra = 7 }, [ ENUM_RatingArenaType_6x6 ] = false }
+	local from, calls = #LOG + 1, RATING_CALLS
+	STATE.target, STATE.inspect = 50, 50
 	EVENTS.EVENT_AVATAR_TARGET_CHANGED( {} )
-	check( logCount( from, "рейтинг [цель #1] ник=Аренщик", "фракция=чужая (Империя)", "друг=false враг=true" ) == 1, "рейтинг: цель — ник и чужая фракция" )
-	check( logCount( from, "3x3 (тип=0): currentSeason={ over_game=40 wins=25 score=1500 top=12 timeSpentMs=3600000 difficulty=W\"Золото\" }" ) == 1,
-		"рейтинг: все поля текущего сезона" )
-	check( logCount( from, "lastSeason=nil" ) == 1 and logCount( from, "6x6 (тип=1): nil" ) == 1 and logCount( from, "(нет в документации) extra=7" ) == 1,
-		"рейтинг: nil для сезона и арены, лишнее поле отмечено" )
-	second( 3 )
-	check( logCount( from, "повтор через 3 с после «цель #1»", "без изменений" ) == 1, "рейтинг: повтор через 3 с — без изменений" )
-	RATING[ 50 ][ ENUM_RatingArenaType_6x6 ] = { currentSeason = { over_game = 0, wins = 0, score = 0, top = 0, timeSpentMs = 0 }, lastSeason = season }
-	second( 7 )
-	check( logCount( from, "повтор через 10 с после «цель #1», ОТВЕТ ИЗМЕНИЛСЯ" ) == 1 and logCount( from, "6x6 (тип=1): currentSeason={ over_game=0", "difficulty=nil" ) == 1,
-		"рейтинг: повтор через 10 с — данные пришли позже" )
-	STATE.target = nil
-	EVENTS.EVENT_AVATAR_TARGET_CHANGED( {} )
-	check( logCount( from, "рейтинг [цель #2]" ) == 0, "рейтинг: без цели записи нет" )
-
-	-- рядом: каждый ник один раз, не больше 10 на сторону; ушедший из видимости не перезапрашивается
-	from = #LOG + 1
-	local spawned = {}
-	for i = 1, 14 do
-		UNITS[ 100 + i ] = { name = "Свой" .. i, shard = "Нить судьбы", fac = "Лига", cls = "MAGE", gs = 0 }
-		spawned[ #spawned + 1 ] = 100 + i
-	end
-	spawned[ #spawned + 1 ] = 50
-	EVENTS.EVENT_UNITS_CHANGED( { spawned = spawned, despawned = {} } )
-	EVENTS.EVENT_UNITS_CHANGED( { spawned = spawned, despawned = {} } )
-	check( logCount( from, "рейтинг [рядом, своя #" ) == 10 and logCount( from, "рейтинг [рядом, чужая #1] ник=Аренщик" ) == 1,
-		"рейтинг: рядом — 10 своих и чужой, без повторов по нику" )
-	for i = 1, 14 do UNITS[ 100 + i ] = nil end
+	EVENTS.EVENT_INSPECT_STARTED( {} )
+	EVENTS.EVENT_UNITS_CHANGED( { spawned = { 50 }, despawned = {} } )
 	second( 10 )
-	check( logCount( from, "игрока уже не видно" ) == 20 and logCount( from, "«рядом, чужая #1»", "без изменений" ) == 2, "рейтинг: ушедших не запрашивает" )
-
-	-- осмотр: запрос по осматриваемому; осмотр недоступен — только запись об этом
-	from = #LOG + 1
-	STATE.inspect = 50
-	EVENTS.EVENT_INSPECT_STARTED( {} )
-	check( logCount( from, "рейтинг [осмотр #1] ник=Аренщик" ) == 1 and logCount( from, "осматривается=true" ) == 1, "рейтинг: после осмотра" )
+	check( RATING_CALLS == calls and logCount( from, "рейтинг" ) == 0, "рейтинг: цель, осмотр и незнакомый игрок рядом — без запросов и записей в журнал" )
 	STATE.inspect = nil
-	EVENTS.EVENT_INSPECT_STARTED( {} )
-	check( logCount( from, "рейтинг [осмотр #2]: осматриваемого игрока нет" ) == 1, "рейтинг: осмотр без игрока" )
-	STATE.inspectAllowed = false
-	EVENTS.EVENT_INSPECT_STARTED( {} )
-	check( logCount( from, "рейтинг [осмотр #3]: avatar.IsInspectAllowed()=false" ) == 1, "рейтинг: осмотр недоступен" )
-
-	-- рейтинг недоступен (часть активностей): функция не вызывается, в журнале — «false»
-	from = #LOG + 1
-	STATE.ratingAvailable = false
-	local calls = RATING_CALLS
-	STATE.target = 50
-	EVENTS.EVENT_AVATAR_TARGET_CHANGED( {} )
-	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
-	check( RATING_CALLS == calls and logCount( from, "IsRatingPvPScoreAvailable=false осматривается=недоступно" ) == 3, "рейтинг: «недоступно» — без запроса" )
-	STATE.ratingAvailable, STATE.inspectAllowed = true, true
-
-	-- команда: я сам и цель; без цели — запись об этом
-	from = #LOG + 1
 	CHAT = {}
 	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
-	check( logCount( from, "рейтинг [команда, я сам] ник=Я", "фракция=своя (Лига)" ) == 1 and logCount( from, "рейтинг [команда, цель] ник=Аренщик" ) == 1
-		and chatHas( "mods.txt" ), "рейтинг: команда /mc rating — я и цель" )
+	check( logCount( from, "рейтинг [я сам] ник=Я" ) == 1 and logCount( from, "рейтинг [цель] ник=Аренщик" ) == 1 and chatHas( "mods.txt" ),
+		"рейтинг: команда /mc rating — я и цель" )
+	check( logCount( from, "3x3 (тип=0): currentSeason={ over_game=40 wins=25 score=1500 top=12 timeSpentMs=3600000 difficulty=W\"Золото\" }" ) == 1,
+		"рейтинг: все поля текущего сезона" )
+	check( logCount( from, "lastSeason=nil" ) == 3 and logCount( from, "6x6 (тип=1): nil" ) == 1 and logCount( from, "(нет в документации) extra=7" ) == 1
+		and logCount( from, "currentSeason={ over_game=0 wins=0 score=0 top=0 timeSpentMs=0 difficulty=nil }" ) == 2,
+		"рейтинг: nil для сезона и арены, сезон с нулями, лишнее поле отмечено" )
+	second( 10 )
+	check( logCount( from, "рейтинг [" ) == 2, "рейтинг: повторов через 3 и 10 с больше нет" )
+	-- без цели — запись об этом
+	from = #LOG + 1
 	STATE.target = nil
 	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
-	check( logCount( from, "в цели нет другого игрока" ) == 1, "рейтинг: команда без цели" )
-	second( 10 )
+	check( logCount( from, "рейтинг [цель]: в цели нет другого игрока" ) == 1, "рейтинг: команда без цели" )
+	-- рейтинг недоступен (часть активностей): функция не вызывается (иначе заглушка остановит тест), в журнале — «false»
+	from, calls = #LOG + 1, RATING_CALLS
+	STATE.ratingAvailable = false
+	STATE.target = 50
+	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
+	check( RATING_CALLS == calls and logCount( from, "IsRatingPvPScoreAvailable=false" ) == 2, "рейтинг: «недоступно» — команда без запроса" )
+	STATE.ratingAvailable = true
 	-- выключенная отладка: ни запросов, ни записей
 	MC.DEBUG = false
 	from, calls, CHAT = #LOG + 1, RATING_CALLS, {}
-	STATE.target = 50
-	EVENTS.EVENT_AVATAR_TARGET_CHANGED( {} )
-	EVENTS.EVENT_INSPECT_STARTED( {} )
 	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
-	second( 10 )
-	check( RATING_CALLS == calls and #LOG == from - 1 and chatHas( "/mc debug" ), "рейтинг: при выключенной отладке ничего не запрашивает" )
+	check( RATING_CALLS == calls and #LOG == from - 1 and chatHas( "/mc debug" ), "рейтинг: при выключенной отладке команда ничего не запрашивает" )
 	MC.DEBUG = true
-	STATE.target, STATE.inspect = nil, nil
-	UNITS[ 50 ] = nil
+	STATE.target = nil
+	UNITS[ 50 ], RATING[ 50 ] = nil, nil
 else
 	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc debug" ) } )
 	check( MC.DEBUG == nil and MC.Log == nil and MC.File == nil, "обычная сборка: отладки нет, /mc debug ничего не делает" )
-	-- обычная сборка рейтинг арен не запрашивает и команду /mc rating не знает
+	-- обычная сборка команду /mc rating не знает; незнакомого игрока рядом и в цели не запрашивает
 	UNITS[ 50 ] = { name = "Аренщик", shard = "Нить судьбы", fac = "Империя", cls = "MAGE", gs = 0 }
+	local calls = RATING_CALLS
 	STATE.target, STATE.inspect = 50, 50
 	EVENTS.EVENT_AVATAR_TARGET_CHANGED( {} )
 	EVENTS.EVENT_INSPECT_STARTED( {} )
 	EVENTS.EVENT_UNITS_CHANGED( { spawned = { 50 }, despawned = {} } )
 	EVENTS.EVENT_UNKNOWN_SLASH_COMMAND( { text = WS_( "/mc rating" ) } )
 	second( 10 )
-	check( RATING_CALLS == 0 and #LOG == 0, "обычная сборка: рейтинг арен не запрашивается, в mods.txt пусто" )
+	check( RATING_CALLS == calls and #LOG == 0, "обычная сборка: команды /mc rating нет, в mods.txt пусто" )
 	STATE.target, STATE.inspect = nil, nil
 	UNITS[ 50 ] = nil
 end
@@ -434,13 +396,13 @@ check( FIND( "CardInfo" ).pl.posX == 12 + 3 * 30 + 4, "карточка: све�
 MC.UI.CloseCard()
 -- запись из более новой версии: незнакомые поля хвоста не теряются при перезаписи
 local _, chunkName = stored( "U0x6331" )
-CONFIG[ chunkName ][ "U0x6331" ] = packed .. "|a3=1850|zz=x,y"
+CONFIG[ chunkName ][ "U0x6331" ] = packed .. "|q9=1850|zz=x,y"
 MC.DB.Load()
 cm = MC.DB.FindByUid( "0x6331" )
 MC.DB.SetMark( cm, 1 )
 MC.DB.Flush()
 local again = stored( "U0x6331" )
-check( string.find( again, "|c=" .. ids .. "|a3=1850|zz=x,y", 1, true ) ~= nil, "хвост записи: незнакомые поля сохранены как были (" .. again .. ")" )
+check( string.find( again, "|c=" .. ids .. "|q9=1850|zz=x,y", 1, true ) ~= nil, "хвост записи: незнакомые поля сохранены как были (" .. again .. ")" )
 -- база от версии 0.9.2 (15 полей, без хвоста): формат тот же, ничего не очищается и не теряется
 local total = MC.DB.Count()
 CONFIG[ chunkName ][ "U0x6331" ] = string.match( again, "^(.-)|c=" )
@@ -506,6 +468,138 @@ click( "mc_ed_save", "EdSave" )
 check( nt.notes[ 1 ].t == long and nt.notes[ 1 ].e and card( 1 ).pl.sizeY == lines * 19 + 40 and string.find( card( 1 ):GetChildChecked( "NoteDate" ).val, "изм.", 1, true ),
 	"правка: блок вырос под новый текст, дата с пометкой об изменении" )
 MC.UI.CloseCard()
+
+-- 17. Рейтинг арен 3х3 и 6х6: читается при встрече у известного игрока, хранится в хвосте записи, виден в карточке
+local A3, A6 = ENUM_RatingArenaType_3x3, ENUM_RatingArenaType_6x6
+local function games( score, top, played, wins )
+	return { currentSeason = { over_game = played, wins = wins, score = score, top = top, timeSpentMs = 0 } }
+end
+local function same( a, score, top, played, wins ) return a ~= nil and a.s == score and a.t == top and a.g == played and a.w == wins end
+-- время в минутах от полудня 20.11.2026; встреча рядом перечитывает игрока не чаще раза в 10 минут
+local function clock( min )
+	local m = 720 + min
+	DATE = { y = 2026, m = 11, d = 20 + math.floor( m / 1440 ), h = math.floor( m % 1440 / 60 ), min = m % 60 }
+	return MC.NowMin()
+end
+local function see( min )
+	local now = clock( min )
+	EVENTS.EVENT_UNITS_CHANGED( { spawned = { 60 } } )
+	return now
+end
+local T0 = clock( 0 )
+-- незнакомый игрок рядом: записи нет и запроса нет
+UNITS[ 60 ] = { name = "Аренщик", shard = SH, fac = "Лига", cls = "MAGE", gs = 30000 }
+RATING[ 60 ] = { [ A3 ] = games( 987, 312, 40, 25 ) }
+local calls = RATING_CALLS
+EVENTS.EVENT_UNITS_CHANGED( { spawned = { 60 } } )
+check( MC.DB.FindByName( "Аренщик", MC.DB.DictId( "shard", SH ) ) == nil and RATING_CALLS == calls, "рейтинг: незнакомого рядом не записывает и не запрашивает" )
+-- известный (был в группе): при встрече рядом рейтинг записан; арена без игр (нули) не хранится
+local logFrom = #LOG + 1
+local ar = meet( 60, "Аренщик", "a1", "MAGE" )
+check( ar and same( ar.a3, 987, 312, 40, 25 ) and ar.a3.at == T0 and ar.a6 == nil, "рейтинг: записан при встрече известного игрока, момент чтения — время встречи" )
+check( RATING_CALLS == calls + 2, "рейтинг: по одному запросу на арену (" .. ( RATING_CALLS - calls ) .. ")" )
+if MC.Probe then
+	check( logCount( logFrom, "рейтинг арены a3 изменился: Аренщик", "было: нет стало: счёт 987, место 312, игр 40, побед 25" ) == 1
+		and logCount( logFrom, "рейтинг арены" ) == 1, "рейтинг: изменение записано в журнал одной строкой" )
+end
+MC.DB.Flush()
+local line = stored( ar.k )
+print( "  запись с рейтингом: " .. tostring( line ) )
+check( fields( line ) == 16 and string.sub( line, -#( "|a3=987,312,40,25," .. T0 ) ) == "|a3=987,312,40,25," .. T0, "рейтинг: хранится в хвосте записи — счёт, место, игры, победы, момент" )
+-- те же числа: база не помечается изменённой, момент чтения прежний
+logFrom = #LOG + 1
+local info = { name = "Аренщик", shard = SH, noSeen = true, a3 = { s = 987, t = 312, g = 40, w = 25 }, a6 = { s = 0, t = 0, g = 0, w = 0 } }
+MC.DB.Touch( info, T0 + 5 )
+check( not MC.DB.IsDirty() and ar.a3.at == T0, "рейтинг: повторная встреча с теми же числами не помечает базу изменённой" )
+STATE.target = 60
+MC.Game.TargetRecord() MC.DB.Flush()      -- первая встреча «в цели» меняет вид встречи, вторая уже ничего не меняет
+calls = RATING_CALLS
+MC.Game.TargetRecord()
+check( RATING_CALLS == calls + 2 and not MC.DB.IsDirty() and ar.a3.at == T0, "рейтинг: перечитан с теми же числами — база не тронута" )
+STATE.target = nil
+see( 15 )
+check( ar.a3.at == T0, "рейтинг: при тех же числах момент чтения не обновляется при каждой встрече" )
+MC.DB.Flush()
+MC.DB.Touch( info, T0 + 1439 )
+check( not MC.DB.IsDirty() and ar.a3.at == T0, "рейтинг: те же числа меньше суток спустя — момент прежний" )
+MC.DB.Touch( info, T0 + 1440 )
+check( MC.DB.IsDirty() and ar.a3.at == T0 + 1440 and same( ar.a3, 987, 312, 40, 25 ), "рейтинг: те же числа через сутки — момент чтения обновлён" )
+check( logCount( logFrom, "рейтинг арены" ) == 0, "рейтинг: без изменения чисел в журнал ничего не пишется" )
+-- числа изменились (место меняется и без игр): новое значение и новый момент
+RATING[ 60 ][ A3 ] = games( 987, 298, 40, 25 )
+RATING[ 60 ][ A6 ] = games( 1432, 1205, 150, 80 )
+local T2 = see( 3000 )
+check( same( ar.a3, 987, 298, 40, 25 ) and ar.a3.at == T2 and same( ar.a6, 1432, 1205, 150, 80 ) and ar.a6.at == T2, "рейтинг: изменившиеся числа записаны с новым моментом" )
+if MC.Probe then
+	check( logCount( logFrom, "рейтинг арены a3 изменился: Аренщик", "было: счёт 987, место 312, игр 40, побед 25 стало: счёт 987, место 298, игр 40, побед 25" ) == 1
+		and logCount( logFrom, "рейтинг арены a6 изменился" ) == 1, "рейтинг: в журнале — что было и что стало" )
+end
+-- рейтинг недоступен (часть активностей): запроса нет (иначе заглушка остановит тест), прежнее значение остаётся
+RATING[ 60 ][ A3 ] = games( 1, 2, 3, 4 )
+STATE.ratingAvailable = false
+calls = RATING_CALLS
+see( 3020 )
+check( RATING_CALLS == calls and same( ar.a3, 987, 298, 40, 25 ) and same( ar.a6, 1432, 1205, 150, 80 ) and ar.seen == T2 + 20,
+	"рейтинг: «недоступно» — запроса нет, прежнее значение сохранено, встреча записана" )
+STATE.ratingAvailable = true
+-- игра вернула nil: прежнее значение остаётся
+RATING[ 60 ] = false
+calls = RATING_CALLS
+see( 3040 )
+check( RATING_CALLS == calls + 2 and same( ar.a3, 987, 298, 40, 25 ) and same( ar.a6, 1432, 1205, 150, 80 ), "рейтинг: ответ nil — прежнее значение сохранено" )
+RATING[ 60 ] = { [ A3 ] = false, [ A6 ] = games( 1440, 1190, 151, 81 ) }
+see( 3060 )
+check( same( ar.a3, 987, 298, 40, 25 ) and same( ar.a6, 1440, 1190, 151, 81 ), "рейтинг: nil по одной арене не мешает записать другую" )
+-- запись и загрузка; незнакомые поля хвоста по-прежнему сохраняются
+MC.DB.Flush()
+line = stored( ar.k )
+check( fields( line ) == 17 and string.find( line, "|a3=987,298,40,25," .. T2 .. "|a6=1440,1190,151,81," .. ( T2 + 60 ), 1, true ) ~= nil, "рейтинг: обе арены в хвосте записи (" .. tostring( line ) .. ")" )
+local _, arChunk = stored( ar.k )
+CONFIG[ arChunk ][ ar.k ] = line .. "|q9=1850"
+MC.DB.Load()
+ar = MC.DB.FindByUid( "0x6131" )
+check( ar and same( ar.a3, 987, 298, 40, 25 ) and ar.a3.at == T2 and same( ar.a6, 1440, 1190, 151, 81 ) and ar.a6.at == T2 + 60
+	and ar.ext and ar.ext[ 1 ] == "q9=1850", "рейтинг переживает загрузку базы, незнакомое поле сохранено" )
+-- карточка: счёт, место и победы из игр, дата записи; большие числа — короткий вид
+MC.UI.OpenCard( ar )
+local function arenaRow( name ) return FIND( name .. "Label" ).val, FIND( name .. "Score" ).val, FIND( name .. "Info" ).val, FIND( name .. "Date" ).val end
+local l3, s3, i3, d3 = arenaRow( "FA3" )
+local l6, s6, i6, d6 = arenaRow( "FA6" )
+print( "  карточка: " .. table.concat( { l3, s3, i3, d3 }, " | " ) .. "  //  " .. table.concat( { l6, s6, i6, d6 }, " | " ) )
+check( l3 == "3х3" and s3 == "987" and i3 == "место 298 · 25 из 40" and d3 == "22.11.2026", "карточка: рейтинг 3х3 — счёт, место, победы из игр, дата записи" )
+check( l6 == "6х6" and s6 == "1 440" and i6 == "место 1 190 · 81/151" and d6 == "22.11.2026", "карточка: рейтинг 6х6 — большие числа в коротком виде" )
+-- новый сезон: пришли нули — прежний рейтинг убран, в карточке «нет данных»
+RATING[ 60 ] = { [ A3 ] = games( 0, 0, 0, 0 ) }
+see( 3080 )
+check( ar.a3 == nil and ar.a6 == nil and MC.DB.IsDirty(), "рейтинг: нули стирают прежнее значение" )
+second()
+l3, s3, i3, d3 = arenaRow( "FA3" )
+check( s3 == "—" and i3 == "нет данных" and d3 == "" and FIND( "FA6Info" ).val == "нет данных" and FIND( "FA6Label" ).val == "6х6",
+	"карточка: рейтинга нет — «нет данных», строки на месте" )
+MC.UI.CloseCard()
+MC.DB.Flush()
+line = stored( ar.k )
+check( fields( line ) == 16 and string.find( line, "a3=", 1, true ) == nil and string.find( line, "a6=", 1, true ) == nil
+	and string.sub( line, -8 ) == "|q9=1850", "рейтинг: без игр запись не растёт (" .. tostring( line ) .. ")" )
+-- запись версии 0.9.4 (без ключей рейтинга, с хвостом классов) читается без потерь и дополняется при встрече
+CONFIG[ arChunk ][ ar.k ] = "Аренщик|1|1|" .. T0 .. "|0|g|30000|" .. T0 .. "|0x6131|" .. MC.DB.DictId( "cls", "Маг" ) .. "|" .. T0 .. "|0|0|" .. T0 .. "||c=" .. MC.DB.DictId( "cls", "Друид" )
+local total = MC.DB.Count()
+MC.DB.Load()
+ar = MC.DB.FindByUid( "0x6131" )
+check( MC.DB.Count() == total and ar and ar.name == "Аренщик" and ar.gs == 30000 and ar.seen == T0 and ar.a3 == nil and ar.a6 == nil and ar.ext == nil
+	and table.concat( MC.DB.Classes( ar ), "," ) == "Маг,Друид", "запись 0.9.4 без рейтинга читается без потерь" )
+MC.DB.SetMark( ar, 1 ) MC.DB.SetMark( ar, 0 )
+MC.DB.Flush()
+check( stored( ar.k ) == "Аренщик|1|1|" .. T0 .. "|0|g|30000|" .. T0 .. "|0x6131|" .. MC.DB.DictId( "cls", "Маг" ) .. "|" .. T0 .. "|0|0|" .. T0 .. "||c=" .. MC.DB.DictId( "cls", "Друид" ),
+	"запись 0.9.4: после перезаписи строка та же, лишних полей нет" )
+RATING[ 60 ] = { [ A6 ] = games( 15, 0, 1, 0 ) }
+see( 3100 )
+MC.UI.OpenCard( ar )
+check( same( ar.a6, 15, 0, 1, 0 ) and ar.a3 == nil and FIND( "FA6Info" ).val == "место — · 0 из 1" and FIND( "FA6Score" ).val == "15",
+	"запись 0.9.4: рейтинг дописан при встрече; места ещё нет — прочерк" )
+MC.UI.CloseCard()
+UNITS[ 60 ], RATING[ 60 ] = nil, nil
+DATE = { y = 2026, m = 11, d = 13, h = 22, min = 0 }
 
 print( fails == 0 and "ВСЁ ОК" or ( "ОШИБОК: " .. fails ) )
 os.exit( fails == 0 and 0 or 1 )   -- код выхода — для test/run.sh и проверок на GitHub
