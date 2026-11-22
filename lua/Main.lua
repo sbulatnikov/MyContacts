@@ -46,6 +46,7 @@ end
 
 local CLICKS = {
 	mc_main = OnMain,
+	mc_main_right = UI.OnButtonTarget,
 	mc_close = function() UI.ShowWindow( false ) if DB.IsDirty() then DB.Flush() end end,
 	mc_gear = UI.OnGear,
 	mc_search_clear = UI.OnSearchClear,

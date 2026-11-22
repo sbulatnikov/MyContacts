@@ -311,7 +311,8 @@ def header(prefix, w, title_fmt, buttons):
 
 # ------------------------------------------------------------------ кнопка на экране (24×24, вдвое меньше прежней)
 ipanel('MCIcon', 5, 5, 14, BOOK)
-X.button('MCButton', PL(5, 5, 24, 24), [{'normal': LAUNCH['n'], 'hover': LAUNCH['h'], 'pressed': LAUNCH['h'], 'reaction': 'mc_main'}],
+X.button('MCButton', PL(5, 5, 24, 24), [{'normal': LAUNCH['n'], 'hover': LAUNCH['h'], 'pressed': LAUNCH['h'], 'reaction': 'mc_main',
+                                             'rclick': 'mc_main_right'}],   # правый клик — карточка игрока в цели
          children=['MCIcon.(WidgetPanel).xdb'], force_pointing='mc_tip')
 X.panel('MCRing', PL(0, 0, 34, 34), back=RING, transparent=True, visible=False)
 X.panel('MCBadge', PL(24, 3, 7, 7), back='Textures/NegBadge.Stretch.(WidgetLayerSimpleTexture).xdb', transparent=True, visible=False)

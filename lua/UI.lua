@@ -763,15 +763,26 @@ function UI.OnSort()
 	UI.Render()
 end
 
-function UI.OnTarget()
+-- Карточка игрока в цели; незнакомый игрок при этом записывается по нику.
+-- anchor — виджет, под которым показать причину, если карточку открыть нельзя.
+local function OpenTarget( anchor )
 	local r, err = MC.Game.TargetRecord()
 	if r then
 		listDirty = true
 		UI.OpenCard( r )
 		UI.Render()
 	else
-		UI.ShowTip( ui.target, err or "Нет цели", true, 3 )
+		UI.ShowTip( anchor, err or "Нет цели", true, 3 )
 	end
+end
+
+function UI.OnTarget()
+	OpenTarget( ui.target )
+end
+
+-- Правый клик по кнопке аддона: карточка игрока в цели сразу, главное окно не открывается
+function UI.OnButtonTarget()
+	OpenTarget( ui.button )
 end
 
 local FILTER_KEYS = { FNeu = "neu", FNeg = "neg", FPos = "pos", FNotes = "notes", FRecent = "recent" }

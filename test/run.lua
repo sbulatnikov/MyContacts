@@ -203,7 +203,14 @@ click( "mc_target", "TargetBtn" )
 local tg = MC.DB.FindByName( "Целевой", MC.DB.DictId( "shard", "Нить судьбы" ) )
 check( tg and tg.man and tg.gs == 50000 and FIND( "CardNick" ).val == "Целевой", "цель: добавлен вручную, карточка открыта" )
 MC.UI.CloseCard() MC.UI.ShowWindow( false )
+-- правый клик по кнопке аддона: карточка цели без главного окна; нет цели — подсказка, карточка закрыта
+click( "mc_main_right", "MCButton" )
+check( FIND( "CardWindow" ).visible and FIND( "CardNick" ).val == "Целевой" and not FIND( "MainWindow" ).visible,
+	"правый клик по кнопке: карточка цели, окно не открыто" )
+MC.UI.CloseCard()
 STATE.target = nil
+click( "mc_main_right", "MCButton" )
+check( not FIND( "CardWindow" ).visible and FIND( "TipText" ).val == "Нет цели", "правый клик без цели: подсказка «Нет цели»" )
 
 -- 13. Интерфейс: окно, фильтры, повторный клик, сброс, прокрутка
 for i = 1, 40 do
