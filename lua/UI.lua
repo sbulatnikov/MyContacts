@@ -17,7 +17,10 @@ UI.view = "main"
 
 local ROWS, ROW_H, WHEEL_ROWS = 16, 28, 3
 local NAME_ROWS = 4         -- строк в «Ники»: первая — текущий, остальные — история
-local GUILD_ROWS = 5        -- строк в «Гильдии» (название слева, ранг справа): первая — текущая
+local GUILD_ROWS = 4        -- строк в «Гильдии» (название слева, ранг справа): первая — текущая
+-- рейтинг арен в карточке: поле записи (DB.lua), имя строки виджетов (gen/build.py), подпись
+local ARENAS = { { key = "a3", row = "FA3", label = "3х3" }, { key = "a6", row = "FA6", label = "6х6" } }
+local ARENA_INFO_MAX = 21   -- знаков в пояснении к счёту: столько входит в его поле (140 px, шрифт 14)
 local TRACK_H = 450
 -- эмблемы классов в карточке (размеры — как в gen/build.py): первая — текущий класс,
 -- остальные — классы, на которых игрок был замечен раньше
@@ -148,6 +151,11 @@ function UI.Init()
 	SetText( W( "FGuildLabel" ), "Гильдия" )
 	SetText( W( "FRankLabel" ), "Ранг" )
 	SetText( W( "FUidLabel" ), "UID" )
+	ui.arenas = {}
+	for i, a in ipairs( ARENAS ) do
+		ui.arenas[ i ] = { score = W( a.row .. "Score" ), info = W( a.row .. "Info" ), date = W( a.row .. "Date" ) }
+		SetText( W( a.row .. "Label" ), a.label )
+	end
 	ui.namesTitle = W( "NamesTitle" )
 	ui.guildsTitle = W( "GuildsTitle" )
 	ui.nameRows, ui.guildRows = {}, {}
@@ -442,6 +450,28 @@ function UI.GuildText( name, rank, unknown )
 	return name
 end
 
+-- Строка рейтинга арены в карточке: счёт (главное), пояснение «место · побед из игр» и дата,
+-- на которую значение записано (как гильдия — по последней встрече).
+-- a — r.a3 или r.a6; nil — игр в сезоне нет или рейтинг ещё не читался (в базе это не различается).
+function UI.ArenaTexts( a )
+	if not a then return "—", "нет данных", "" end
+	local place = "место " .. ( a.t > 0 and MC.Num( a.t ) or "—" )
+	local info = place .. " · " .. a.w .. " из " .. a.g
+	-- большие числа (место за тысячу и сотни игр) в поле не входят — тогда короче: «побед/игр»
+	if MC.CharLen( info ) > ARENA_INFO_MAX then info = place .. " · " .. a.w .. "/" .. a.g end
+	return MC.Num( a.s ), info, MC.FmtDate( a.at )
+end
+
+local function RenderArenas( r )
+	for i, a in ipairs( ARENAS ) do
+		local row = ui.arenas[ i ]
+		local score, info, date = UI.ArenaTexts( r[ a.key ] )
+		SetText( row.score, score )
+		SetText( row.info, info )
+		SetText( row.date, date )
+	end
+end
+
 -- Эмблемы классов слева от строки сведений: первая — текущий класс, прежние — приглушены.
 -- Строка сведений сдвигается на ширину показанных эмблем.
 -- names — названия классов (текущий первым). Класс, эмблемы которого в аддоне нет (новый в игре
@@ -538,6 +568,7 @@ local function RenderCard()
 	local gname = r.g and DB.DictName( "guild", r.g )
 	SetText( ui.fields.guild, GuildName( gname, r.g == nil ) )
 	SetText( ui.fields.rank, ( gname and gname ~= "" and RankName( r.gr ) ) or "—" )
+	RenderArenas( r )
 	-- ники: текущий, затем прежние (новые сверху)
 	local names = r.names or {}
 	SetText( ui.namesTitle, "Ники" )

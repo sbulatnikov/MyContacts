@@ -254,6 +254,7 @@ F('Btn.DSoft', F_BODY, '#F2B4B2', 'center', tag='button_label')
 F('Menu', F_BODY, TXT, 'left', tag='button_label')
 F('MarkLabel', F_BODY, TXT2)
 F('Value', F_BODY, TXT, 'right')
+F('Score', F_BODY, ACC_I)
 F('NoteText', F_BODY, TXT, 'left', aligny='top')
 F('TipText', F_SMALL, TXT, 'left', aligny='top')
 F('CfText', F_BODY, TXT2, 'left', aligny='top')
@@ -493,8 +494,22 @@ for i, nm in enumerate(('FGuild', 'FRank', 'FUid')):
     tv(nm + 'Label', 12, y, 150, 24, 'Small3', transparent=False, pointing='mc_tip')
     tv(nm + 'Value', 120, y, LEFT_W - 120, 24, 'Value', transparent=False, pointing='mc_tip')
     fields += [nm + 'Label.(WidgetTextView).xdb', nm + 'Value.(WidgetTextView).xdb']
+# рейтинг арен 3х3 и 6х6 — две строки под полями, всегда на своих местах (нет рейтинга — «нет данных»),
+# поэтому карточка не меняет раскладку от игрока к игроку. В строке шириной 288 px (x 12..300):
+#   подпись «3х3» 28 px · счёт (главное, цветом акцента) 46 px · «место 312 · 25 из 40» 140 px · дата справа 70 px.
+# Тексты и запасной короткий вид длинной строки — lua/UI.lua (ArenaTexts).
+# Место под эти строки: блоки «Ники» и «Гильдии» сдвинуты вниз на 52 px, а строк в «Гильдии» стало 4 вместо 5
+# (остальное — колесом), иначе список гильдий наезжал бы на кнопку «Удалить из базы» (y = 616).
+ARENA_Y, ARENA_STEP = 250, 26
+for i, nm in enumerate(('FA3', 'FA6')):
+    y = ARENA_Y + i * ARENA_STEP
+    tv(nm + 'Label', 12, y, 28, 24, 'Small3')
+    tv(nm + 'Score', 42, y, 46, 24, 'Score')
+    tv(nm + 'Info', 90, y, 140, 24, 'Small3')
+    tv(nm + 'Date', 230, y, LEFT_W - 230, 24, 'Small3R')
+    fields += [nm + s + '.(WidgetTextView).xdb' for s in ('Label', 'Score', 'Info', 'Date')]
 # ники и гильдии: первая строка — текущее, остальные — история (прокрутка колесом)
-NAME_ROWS, GUILD_ROWS = 4, 5
+NAME_ROWS, GUILD_ROWS = 4, 4
 
 
 def history(prefix, title_y, rows_y, wheel, rows, right=None):
@@ -517,8 +532,8 @@ def history(prefix, title_y, rows_y, wheel, rows, right=None):
     return kids
 
 
-name_rows = history('Names', 260, 286, ('mc_names_up', 'mc_names_down'), NAME_ROWS)
-guild_rows = history('Guilds', 410, 436, ('mc_guilds_up', 'mc_guilds_down'), GUILD_ROWS, right='Rank')
+name_rows = history('Names', 312, 338, ('mc_names_up', 'mc_names_down'), NAME_ROWS)
+guild_rows = history('Guilds', 462, 488, ('mc_guilds_up', 'mc_guilds_down'), GUILD_ROWS, right='Rank')
 # правая колонка: заметки
 RX, RW = 324, 264
 tv('NotesTitle', RX, 172, 200, 22, 'Sect', transparent=False, pointing='mc_tip')
