@@ -608,5 +608,23 @@ MC.UI.CloseCard()
 UNITS[ 60 ], RATING[ 60 ] = nil, nil
 DATE = { y = 2026, m = 11, d = 13, h = 22, min = 0 }
 
+-- Форма раньше называлась MainForm: места кнопки и окон, сохранённые LibDnD, переезжают на новое имя формы
+CONFIG.MyContacts = CONFIG.MyContacts or {}
+CONFIG.MyContacts.keepMe = 7
+CONFIG.MyContacts[ "DnD:MainForm.MainWindow" ] = { posX = 111, posY = 222 }
+CONFIG.MyContacts[ "DnD:MainForm.Twice" ] = { posX = 1 }
+CONFIG.MyContacts[ "DnD:MyContacts.Twice" ] = { posX = 2 }
+MC.MoveWindowPlaces()
+do
+	local cfg = CONFIG.MyContacts
+	local moved = cfg[ "DnD:MyContacts.MainWindow" ]
+	check( mainForm:GetName() == "MyContacts", "форма называется именем аддона" )
+	check( moved and moved.posX == 111 and moved.posY == 222 and cfg[ "DnD:MainForm.MainWindow" ] == nil, "место окна переехало на новое имя формы, старый ключ убран" )
+	check( cfg[ "DnD:MyContacts.Twice" ].posX == 2 and cfg[ "DnD:MainForm.Twice" ] == nil, "место, уже сохранённое под новым именем, не затирается" )
+	check( cfg.keepMe == 7, "остальные настройки при переносе не тронуты" )
+end
+MC.MoveWindowPlaces()
+check( CONFIG.MyContacts[ "DnD:MyContacts.MainWindow" ].posX == 111, "повторный перенос ничего не меняет" )
+
 print( fails == 0 and "ВСЁ ОК" or ( "ОШИБОК: " .. fails ) )
 os.exit( fails == 0 and 0 or 1 )   -- код выхода — для test/run.sh и проверок на GitHub

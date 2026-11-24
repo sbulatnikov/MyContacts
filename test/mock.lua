@@ -78,7 +78,7 @@ function Widget.Enable( w, on ) w.enabled = on end
 function Widget.SetFade( w, a ) w.fade = a end
 function Widget.GetInstanceId( w ) return tostring( w ) end
 function Widget.DNDRegisterGeneric() return #all end
-mainForm = NewW( "MainForm" )
+mainForm = NewW( "MyContacts" )
 function FIND( name ) return mainForm:GetChildChecked( name, true ) end
 
 -- Мир

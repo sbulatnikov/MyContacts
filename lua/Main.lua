@@ -157,6 +157,7 @@ local function Start()
 		dragTo( params )
 		if UI.IsScrollDrag() then UI.OnThumbMoved() end
 	end
+	MC.MoveWindowPlaces()
 	DnD.Init( MC.W( "MCHost" ), MC.W( "MCButton" ), true, true )
 	DnD.Init( MC.W( "MainWindow" ), MC.W( "MainHeader" ), true, true )
 	DnD.Init( MC.W( "CardWindow" ), MC.W( "CardHeader" ), true, true )
