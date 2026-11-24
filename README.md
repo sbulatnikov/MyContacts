@@ -5,7 +5,7 @@
 
 ![Окно MyContacts](release/promo/MyContacts-01-cover.png)
 
-Версия 0.9.5 (бета). Автор — NoMercy.
+Версия 0.9.6 (бета). Автор — NoMercy.
 
 ## Что умеет
 
