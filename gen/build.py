@@ -612,7 +612,7 @@ X.textview('TipText', PL(10, 7, None, None, 'WIDGET_ALIGN_BOTH', 'WIDGET_ALIGN_B
 X.panel('Tooltip', PL(0, 0, 300, 40), children=['TipBack.(WidgetPanel).xdb', 'TipBackWarn.(WidgetPanel).xdb', 'TipText.(WidgetTextView).xdb'],
         transparent=True, visible=False, priority=990)
 
-X.form('MainForm', ['MainWindow.(WidgetPanel).xdb', 'CardWindow.(WidgetPanel).xdb', 'MCHost.(WidgetPanel).xdb',
+X.form('MyContacts', ['MainWindow.(WidgetPanel).xdb', 'CardWindow.(WidgetPanel).xdb', 'MCHost.(WidgetPanel).xdb',
                     'Confirm.(WidgetPanel).xdb', 'Tooltip.(WidgetPanel).xdb'])
 
 X.text_file('AddonName', 'MyContacts')
